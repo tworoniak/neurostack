@@ -51,7 +51,7 @@ export default function App() {
               lastRefreshed={lastRefreshed}
             />
 
-            <main style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-base)' }}>
+            <main style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
               {activeView === 'editor' && (
                 <FileEditor
                   directory={directory}
