@@ -9,7 +9,10 @@ export function parseDecisions(content: string): DecisionEntry[] {
     const header = lines[0].trim()
     const dateMatch = header.match(/^(\d{4}-\d{2}-\d{2})\s*[-–]\s*(.+)/)
 
-    if (!dateMatch) continue
+    if (!dateMatch) {
+      console.warn('[parseDecisions] Skipping malformed entry (expected "YYYY-MM-DD - Title"):', header)
+      continue
+    }
 
     const body = lines.slice(1).join('\n').trim()
     entries.push({

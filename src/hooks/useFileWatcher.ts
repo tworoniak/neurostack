@@ -11,9 +11,27 @@ export function useFileWatcher(
   useEffect(() => {
     if (!directory) return
 
-    timerRef.current = setInterval(onRefresh, intervalMs)
+    const start = () => {
+      if (timerRef.current) return
+      timerRef.current = setInterval(onRefresh, intervalMs)
+    }
+
+    const stop = () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+
+    const handleVisibility = () => {
+      document.visibilityState === 'hidden' ? stop() : start()
+    }
+
+    start()
+    document.addEventListener('visibilitychange', handleVisibility)
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
+      stop()
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [directory, onRefresh, intervalMs])
 }

@@ -9,6 +9,7 @@ interface Props {
 
 export function Search({ directory, onSelectFile }: Props) {
   const [query, setQuery] = useState('')
+  const [hoveredFile, setHoveredFile] = useState<string | null>(null)
   const results = useSearch(directory, query)
 
   // Group by file path
@@ -84,6 +85,7 @@ export function Search({ directory, onSelectFile }: Props) {
         {query && (
           <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.03em' }}>
             {results.length} match{results.length !== 1 ? 'es' : ''} across {fileCount} file{fileCount !== 1 ? 's' : ''}
+            {results.length === 40 && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>· results capped at 40</span>}
           </div>
         )}
       </div>
@@ -112,26 +114,18 @@ export function Search({ directory, onSelectFile }: Props) {
                     width: '100%',
                     padding: '8px 12px',
                     marginBottom: 4,
-                    background: 'transparent',
-                    border: '1px solid transparent',
+                    background: hoveredFile === file.path ? 'var(--bg-raised)' : 'transparent',
+                    border: `1px solid ${hoveredFile === file.path ? 'var(--border)' : 'transparent'}`,
                     borderRadius: 'var(--radius-md)',
-                    color: 'var(--text-secondary)',
+                    color: hoveredFile === file.path ? 'var(--text-primary)' : 'var(--text-secondary)',
                     fontSize: 12,
                     textAlign: 'left',
                     cursor: 'pointer',
                     transition: 'all 0.1s',
                     fontFamily: 'var(--font-mono)',
                   }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'var(--bg-raised)'
-                    e.currentTarget.style.borderColor = 'var(--border)'
-                    e.currentTarget.style.color = 'var(--text-primary)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.borderColor = 'transparent'
-                    e.currentTarget.style.color = 'var(--text-secondary)'
-                  }}
+                  onMouseEnter={() => setHoveredFile(file.path)}
+                  onMouseLeave={() => setHoveredFile(null)}
                 >
                   <span style={{ color: 'var(--accent)', opacity: 0.5 }}>⬡</span>
                   <span style={{ flex: 1 }}>{file.path}</span>
@@ -177,11 +171,10 @@ export function Search({ directory, onSelectFile }: Props) {
               <span style={{
                 marginLeft: 'auto',
                 fontSize: 10,
-                color: 'var(--text-muted)',
+                color: 'var(--accent)',
                 background: 'var(--accent-dim)',
                 padding: '1px 7px',
                 borderRadius: 99,
-                color: 'var(--accent)',
               }}>
                 {matches.length}
               </span>

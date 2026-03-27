@@ -42,17 +42,25 @@ export function useSearch(directory: MemoryDirectory | null, query: string): Sea
     [items]
   )
 
+  const MAX_RESULTS = 40
+
   return useMemo(() => {
     if (!query.trim()) return []
-    return fuse
-      .search(query)
-      .slice(0, 40)
-      .map(r => ({
+    const seen = new Set<string>()
+    const results: SearchResult[] = []
+    for (const r of fuse.search(query)) {
+      const key = `${r.item.path}:${r.item.lineNum}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      results.push({
         path: r.item.path,
         name: r.item.name,
         content: r.item.content,
         matchedLine: r.item.line,
         lineNumber: r.item.lineNum,
-      }))
+      })
+      if (results.length === MAX_RESULTS) break
+    }
+    return results
   }, [fuse, query])
 }

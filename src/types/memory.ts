@@ -42,3 +42,8 @@ export interface MemoryDirectory {
 }
 
 export type ViewId = 'editor' | 'agents' | 'timeline' | 'search'
+
+// File System Access API — not yet in all TypeScript DOM lib versions
+declare global {
+  function showDirectoryPicker(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>
+}
