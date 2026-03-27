@@ -13,14 +13,17 @@ import { Search } from './components/views/Search'
 export default function App() {
   const [activeView, setActiveView] = useState<ViewId>('editor')
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   // Used to navigate to file editor with a specific file pre-selected
   const [editorJumpPath, setEditorJumpPath] = useState<string | undefined>()
 
   const { directory, error, loading, openDirectory, writeFile, refreshAll } = useMemoryFS()
 
   const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
     await refreshAll()
     setLastRefreshed(new Date())
+    setRefreshing(false)
   }, [refreshAll])
 
   // Auto-refresh on interval when directory is open
@@ -49,6 +52,7 @@ export default function App() {
               activeView={activeView}
               onRefresh={handleRefresh}
               lastRefreshed={lastRefreshed}
+              refreshing={refreshing}
             />
 
             <main style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>

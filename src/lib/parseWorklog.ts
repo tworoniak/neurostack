@@ -13,8 +13,12 @@ export function parseWorklog(content: string): WorklogEntry[] {
     const summary = lines[1]?.replace(/^[-*]\s*/, '').trim() ?? ''
     const details = lines.slice(2).join('\n').trim()
 
+    if (!dateMatch?.[1]) {
+      console.warn('[parseWorklog] Skipping malformed entry (expected "YYYY-MM-DD [project]"):', header)
+      continue
+    }
     entries.push({
-      date: dateMatch?.[1] ?? '',
+      date: dateMatch[1],
       project: projectMatch?.[1] ?? header,
       summary,
       details,

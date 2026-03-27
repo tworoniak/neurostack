@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+
+const SAVED_FLASH_MS = 1800
 import type { MemoryDirectory } from '../../types/memory'
 
 interface Props {
@@ -134,6 +136,7 @@ export function FileEditor({ directory, onWrite, jumpToPath, onJumped }: Props) 
   const [isDirty, setIsDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
 
   useEffect(() => {
@@ -166,16 +169,22 @@ export function FileEditor({ directory, onWrite, jumpToPath, onJumped }: Props) 
   const handleSave = async () => {
     if (!selectedPath) return
     setSaving(true)
+    setSaveError(false)
     const ok = await onWrite(selectedPath, editContent)
     setSaving(false)
     if (ok) {
       setIsDirty(false)
       setSavedFlash(true)
-      setTimeout(() => setSavedFlash(false), 1800)
+      setTimeout(() => setSavedFlash(false), SAVED_FLASH_MS)
+    } else {
+      setSaveError(true)
     }
   }
 
-  const file = selectedPath ? directory?.files.get(selectedPath) : null
+  const file = useMemo(
+    () => (selectedPath ? directory?.files.get(selectedPath) : null),
+    [selectedPath, directory]
+  )
 
   if (!directory) {
     return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><EmptyState /></div>
@@ -199,6 +208,7 @@ export function FileEditor({ directory, onWrite, jumpToPath, onJumped }: Props) 
               <span style={{ color: 'var(--accent)', fontSize: 12, flex: 1 }}>{selectedPath}</span>
               {isDirty && <span className="badge badge-amber">unsaved</span>}
               {savedFlash && <span className="badge badge-working">saved ✓</span>}
+              {saveError && <span className="badge badge-blocked">save failed</span>}
               <button
                 onClick={() => setIsEditing(e => !e)}
                 style={{ padding: '4px 12px', background: isEditing ? 'var(--accent-dim)' : 'var(--bg-overlay)', border: `1px solid ${isEditing ? 'rgba(78,255,196,0.25)' : 'var(--border-mid)'}`, borderRadius: 'var(--radius-sm)', color: isEditing ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 11, letterSpacing: '0.04em' }}
@@ -206,13 +216,16 @@ export function FileEditor({ directory, onWrite, jumpToPath, onJumped }: Props) 
                 {isEditing ? 'preview' : 'edit'}
               </button>
               {isEditing && (
-                <button
-                  onClick={handleSave}
-                  disabled={!isDirty || saving}
-                  style={{ padding: '4px 12px', background: isDirty ? 'var(--accent)' : 'var(--bg-overlay)', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', color: isDirty ? '#0D0D0F' : 'var(--text-muted)', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', cursor: isDirty ? 'pointer' : 'default', transition: 'all 0.15s' }}
-                >
-                  {saving ? 'saving…' : 'save'}
-                </button>
+                <>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>⌘S to save</span>
+                  <button
+                    onClick={handleSave}
+                    disabled={!isDirty || saving}
+                    style={{ padding: '4px 12px', background: isDirty ? 'var(--accent)' : 'var(--bg-overlay)', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', color: isDirty ? '#0D0D0F' : 'var(--text-muted)', fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', cursor: isDirty ? 'pointer' : 'default', transition: 'all 0.15s' }}
+                  >
+                    {saving ? 'saving…' : 'save'}
+                  </button>
+                </>
               )}
             </div>
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>

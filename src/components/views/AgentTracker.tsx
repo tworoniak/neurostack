@@ -15,14 +15,17 @@ const COLUMNS: { id: AgentEntry['status']; label: string; color: string; dimColo
 
 function AgentCard({ agent }: { agent: AgentEntry }) {
   const [expanded, setExpanded] = useState(false)
+  const [hovered, setHovered] = useState(false)
   const col = COLUMNS.find(c => c.id === agent.status)!
 
   return (
     <div
       onClick={() => setExpanded(e => !e)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         background: 'var(--bg-raised)',
-        border: '1px solid var(--border)',
+        border: `1px solid ${hovered ? col.color : 'var(--border)'}`,
         borderLeft: `2px solid ${col.color}`,
         borderRadius: 'var(--radius-md)',
         padding: '12px 14px',
@@ -30,8 +33,6 @@ function AgentCard({ agent }: { agent: AgentEntry }) {
         transition: 'border-color 0.15s, background 0.15s',
         marginBottom: 8,
       }}
-      onMouseEnter={e => (e.currentTarget.style.borderColor = col.color)}
-      onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
         <span className={`badge badge-${agent.status}`}>
@@ -161,6 +162,7 @@ export function AgentTracker({ directory, onWrite }: Props) {
           </div>
           <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
             <input
+              autoFocus
               placeholder="project-name"
               value={newProject}
               onChange={e => setNewProject(e.target.value)}

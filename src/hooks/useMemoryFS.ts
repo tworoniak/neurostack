@@ -9,7 +9,7 @@ export function useMemoryFS() {
   const openDirectory = useCallback(async () => {
     setLoading(true)
     try {
-      const handle = await window.showDirectoryPicker({ mode: 'readwrite' })
+      const handle = await showDirectoryPicker({ mode: 'readwrite' })
       const files = new Map<string, MemoryFile>()
 
       async function readDir(dirHandle: FileSystemDirectoryHandle, prefix = '') {
@@ -42,6 +42,7 @@ export function useMemoryFS() {
     if (!directory) return false
     try {
       const parts = path.split('/')
+      if (parts.some(p => p === '..' || p === '.' || p === '')) return false
       let dir = directory.handle
 
       for (const part of parts.slice(0, -1)) {
@@ -91,7 +92,10 @@ export function useMemoryFS() {
 
   const refreshAll = useCallback(async () => {
     if (!directory) return
-    const updated = new Map(directory.files)
+    // Capture snapshot to avoid stale closure issues inside async scanDir
+    const snapshot = directory
+    // Build a fresh map so deleted files are not carried over
+    const fresh = new Map<string, MemoryFile>()
 
     async function scanDir(dirHandle: FileSystemDirectoryHandle, prefix = '') {
       for await (const [name, entry] of dirHandle.entries()) {
@@ -99,10 +103,12 @@ export function useMemoryFS() {
           const fileHandle = entry as FileSystemFileHandle
           const file = await fileHandle.getFile()
           const path = prefix ? `${prefix}/${name}` : name
-          const existing = updated.get(path)
+          const existing = snapshot.files.get(path)
           if (!existing || file.lastModified > existing.lastModified) {
             const content = await file.text()
-            updated.set(path, { name, path, content, lastModified: file.lastModified })
+            fresh.set(path, { name, path, content, lastModified: file.lastModified })
+          } else {
+            fresh.set(path, existing)
           }
         } else if (entry.kind === 'directory' && name !== 'node_modules' && !name.startsWith('.')) {
           await scanDir(entry as FileSystemDirectoryHandle, prefix ? `${prefix}/${name}` : name)
@@ -110,8 +116,8 @@ export function useMemoryFS() {
       }
     }
 
-    await scanDir(directory.handle)
-    setDirectory({ ...directory, files: updated })
+    await scanDir(snapshot.handle)
+    setDirectory({ ...snapshot, files: fresh })
   }, [directory])
 
   return { directory, error, loading, openDirectory, writeFile, refreshFile, refreshAll }

@@ -24,7 +24,10 @@ export function parseActiveWork(content: string): AgentEntry[] {
     const status: AgentEntry['status'] =
       statusRaw === 'blocked' ? 'blocked' : statusRaw === 'done' ? 'done' : 'working'
 
-    if (!projectMatch?.[1] && !taskMatch?.[1]) continue
+    if (!projectMatch?.[1] && !taskMatch?.[1]) {
+      console.warn('[parseActiveWork] Skipping malformed block (no project or task):', header)
+      continue
+    }
 
     agents.push({
       id: crypto.randomUUID(),

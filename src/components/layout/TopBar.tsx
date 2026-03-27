@@ -11,9 +11,10 @@ interface Props {
   activeView: ViewId
   onRefresh: () => void
   lastRefreshed: Date | null
+  refreshing: boolean
 }
 
-export function TopBar({ activeView, onRefresh, lastRefreshed }: Props) {
+export function TopBar({ activeView, onRefresh, lastRefreshed, refreshing }: Props) {
   const { label, description } = TITLES[activeView]
 
   return (
@@ -42,7 +43,12 @@ export function TopBar({ activeView, onRefresh, lastRefreshed }: Props) {
         </div>
       </div>
 
-      {lastRefreshed && (
+      {refreshing && (
+        <span style={{ fontSize: 10, color: 'var(--accent)', letterSpacing: '0.04em', opacity: 0.7 }}>
+          refreshing…
+        </span>
+      )}
+      {!refreshing && lastRefreshed && (
         <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
           refreshed {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </span>
@@ -50,6 +56,7 @@ export function TopBar({ activeView, onRefresh, lastRefreshed }: Props) {
 
       <button
         onClick={onRefresh}
+        disabled={refreshing}
         title="Refresh all files"
         style={{
           width: 30,
@@ -57,12 +64,13 @@ export function TopBar({ activeView, onRefresh, lastRefreshed }: Props) {
           background: 'var(--bg-overlay)',
           border: '1px solid var(--border-mid)',
           borderRadius: 'var(--radius-md)',
-          color: 'var(--text-secondary)',
+          color: refreshing ? 'var(--text-muted)' : 'var(--text-secondary)',
           fontSize: 14,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           transition: 'all 0.12s',
+          cursor: refreshing ? 'default' : 'pointer',
         }}
       >
         ↻
