@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { ViewId } from './types/memory'
 import { useMemoryFS } from './hooks/useMemoryFS'
 import { useFileWatcher } from './hooks/useFileWatcher'
@@ -17,7 +17,7 @@ export default function App() {
   // Used to navigate to file editor with a specific file pre-selected
   const [editorJumpPath, setEditorJumpPath] = useState<string | undefined>()
 
-  const { directory, error, loading, openDirectory, writeFile, refreshAll } = useMemoryFS()
+  const { directory, error, loading, restoring, openDirectory, writeFile, refreshAll } = useMemoryFS()
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -25,6 +25,18 @@ export default function App() {
     setLastRefreshed(new Date())
     setRefreshing(false)
   }, [refreshAll])
+
+  // ⌘Shift+R keyboard shortcut for manual refresh
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && e.shiftKey && e.key === 'R' && directory && !refreshing) {
+        e.preventDefault()
+        handleRefresh()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [directory, refreshing, handleRefresh])
 
   // Auto-refresh on interval when directory is open
   useFileWatcher(directory, handleRefresh, 4000)
@@ -45,7 +57,7 @@ export default function App() {
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {!directory ? (
-          <Landing onOpen={openDirectory} loading={loading} error={error} />
+          <Landing onOpen={openDirectory} loading={loading} restoring={restoring} error={error} />
         ) : (
           <>
             <TopBar

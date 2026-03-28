@@ -1,4 +1,4 @@
-# NeuroStack
+# NeuroStack v1.1
 
 A self-managing memory dashboard for Claude Code. Built on the memory system architecture described by [sammii](https://sammii.dev).
 
@@ -8,12 +8,12 @@ Reads and writes your Claude Code memory files directly from the browser using t
 
 ## Features
 
-| View | What it does |
-|---|---|
-| **File Editor** | Read and edit any `.md` memory file with `⌘S` to save |
-| **Agent Tracker** | Kanban board parsed from `active-work.md` — working / blocked / done |
-| **Timeline** | Chronological feed of `decisions.md` + `worklog.md` with quick-add forms |
-| **Search** | Fuzzy full-text search across all loaded memory files (powered by Fuse.js) |
+| View              | What it does                                                               |
+| ----------------- | -------------------------------------------------------------------------- |
+| **File Editor**   | Read and edit any `.md` memory file with `⌘S` to save                      |
+| **Agent Tracker** | Kanban board parsed from `active-work.md` — working / blocked / done       |
+| **Timeline**      | Chronological feed of `decisions.md` + `worklog.md` with quick-add forms   |
+| **Search**        | Fuzzy full-text search across all loaded memory files (powered by Fuse.js) |
 
 ---
 

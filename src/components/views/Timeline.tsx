@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import type { MemoryDirectory } from '../../types/memory'
 import { parseDecisions } from '../../lib/parseDecisions'
 import { parseWorklog } from '../../lib/parseWorklog'
+import { inputStyle } from '../../styles/formStyles'
 
 interface Props {
   directory: MemoryDirectory | null
@@ -17,10 +18,17 @@ export function Timeline({ directory, onWrite }: Props) {
   // Decision form state
   const [dTitle, setDTitle] = useState('')
   const [dBody, setDBody] = useState('')
+  const [dError, setDError] = useState(false)
 
   // Worklog form state
   const [wProject, setWProject] = useState('')
   const [wSummary, setWSummary] = useState('')
+  const [wError, setWError] = useState(false)
+
+  useEffect(() => {
+    setDTitle(''); setDBody(''); setDError(false)
+    setWProject(''); setWSummary(''); setWError(false)
+  }, [tab])
 
   const decisionsContent = directory?.files.get('decisions.md')?.content ?? ''
   const worklogContent   = directory?.files.get('worklog.md')?.content ?? ''
@@ -30,22 +38,32 @@ export function Timeline({ directory, onWrite }: Props) {
 
   const handleAddDecision = async () => {
     if (!dTitle) return
+    setDError(false)
     const today = new Date().toISOString().slice(0, 10)
     const entry = `\n## ${today} - ${dTitle}\n${dBody || '- No additional notes.'}\n`
-    await onWrite('decisions.md', decisionsContent + entry)
-    setDTitle('')
-    setDBody('')
-    setShowForm(false)
+    const ok = await onWrite('decisions.md', decisionsContent + entry)
+    if (ok) {
+      setDTitle('')
+      setDBody('')
+      setShowForm(false)
+    } else {
+      setDError(true)
+    }
   }
 
   const handleAddWorklog = async () => {
     if (!wProject || !wSummary) return
+    setWError(false)
     const today = new Date().toISOString().slice(0, 10)
     const entry = `\n## ${today} [${wProject}]\n- ${wSummary}\n`
-    await onWrite('worklog.md', worklogContent + entry)
-    setWProject('')
-    setWSummary('')
-    setShowForm(false)
+    const ok = await onWrite('worklog.md', worklogContent + entry)
+    if (ok) {
+      setWProject('')
+      setWSummary('')
+      setShowForm(false)
+    } else {
+      setWError(true)
+    }
   }
 
   return (
@@ -108,9 +126,12 @@ export function Timeline({ directory, onWrite }: Props) {
             rows={4}
             style={{ ...inputStyle, width: '100%', resize: 'vertical', marginBottom: 10 }}
           />
-          <button onClick={handleAddDecision} disabled={!dTitle} style={submitBtn(!!dTitle)}>
-            Append to decisions.md
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={handleAddDecision} disabled={!dTitle} style={submitBtn(!!dTitle)}>
+              Append to decisions.md
+            </button>
+            {dError && <span style={{ fontSize: 11, color: 'var(--red)' }}>Write failed — check directory permissions</span>}
+          </div>
         </div>
       )}
 
@@ -131,9 +152,12 @@ export function Timeline({ directory, onWrite }: Props) {
               style={{ ...inputStyle, flex: 2 }}
             />
           </div>
-          <button onClick={handleAddWorklog} disabled={!wProject || !wSummary} style={submitBtn(!!(wProject && wSummary))}>
-            Append to worklog.md
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={handleAddWorklog} disabled={!wProject || !wSummary} style={submitBtn(!!(wProject && wSummary))}>
+              Append to worklog.md
+            </button>
+            {wError && <span style={{ fontSize: 11, color: 'var(--red)' }}>Write failed — check directory permissions</span>}
+          </div>
         </div>
       )}
 
@@ -275,17 +299,6 @@ const formLabel: React.CSSProperties = {
   letterSpacing: '0.06em',
 }
 
-const inputStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '7px 10px',
-  background: 'var(--bg-overlay)',
-  border: '1px solid var(--border-mid)',
-  borderRadius: 'var(--radius-sm)',
-  color: 'var(--text-primary)',
-  fontSize: 12,
-  fontFamily: 'var(--font-mono)',
-  outline: 'none',
-}
 
 const submitBtn = (enabled: boolean): React.CSSProperties => ({
   padding: '6px 16px',
