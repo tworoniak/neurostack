@@ -1,10 +1,11 @@
 interface Props {
   onOpen: () => void
   loading: boolean
+  restoring: boolean
   error: string | null
 }
 
-export function Landing({ onOpen, loading, error }: Props) {
+export function Landing({ onOpen, loading, restoring, error }: Props) {
   return (
     <div style={{
       flex: 1,
@@ -84,7 +85,7 @@ export function Landing({ onOpen, loading, error }: Props) {
       {/* CTA */}
       <button
         onClick={onOpen}
-        disabled={loading}
+        disabled={loading || restoring}
         style={{
           padding: '12px 32px',
           background: 'var(--accent-dim)',
@@ -95,14 +96,19 @@ export function Landing({ onOpen, loading, error }: Props) {
           fontFamily: 'var(--font-mono)',
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
-          cursor: 'pointer',
+          cursor: loading || restoring ? 'default' : 'pointer',
           transition: 'all 0.15s',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
         }}
       >
-        {loading ? (
+        {restoring ? (
+          <>
+            <span className="pulse-dot" style={{ background: 'var(--accent)' }} />
+            Restoring session…
+          </>
+        ) : loading ? (
           <>
             <span className="pulse-dot" style={{ background: 'var(--accent)' }} />
             Opening…
