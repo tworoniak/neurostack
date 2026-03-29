@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { MemoryDirectory } from '../../types/memory'
+import type { MemoryDirectory, MemoryFile } from '../../types/memory'
 
 const SAVED_FLASH_MS = 1800
 
@@ -17,7 +17,7 @@ function FileTree({
   selected,
   onSelect,
 }: {
-  files: Map<string, { name: string; path: string; lastModified: number }>
+  files: Map<string, MemoryFile>
   selected: string | null
   onSelect: (path: string) => void
 }) {
@@ -81,12 +81,21 @@ function FileTree({
                     cursor: 'pointer',
                     fontFamily: 'var(--font-mono)',
                     transition: 'all 0.1s',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
                   }}
                 >
-                  {name}
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                  {name === 'MEMORY.md' && (() => {
+                    const lineCount = (files.get(path)?.content ?? '').split('\n').length
+                    const color = lineCount >= 190 ? 'var(--red)' : lineCount >= 150 ? 'var(--amber)' : 'var(--text-muted)'
+                    return (
+                      <span style={{ fontSize: 9, color, flexShrink: 0, opacity: 0.85 }} title={`${lineCount} / 200 lines`}>
+                        {lineCount}L
+                      </span>
+                    )
+                  })()}
                 </button>
               )
             })}
