@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { MemoryDirectory, AgentEntry } from '../../types/memory'
 import { parseActiveWork } from '../../lib/parseActiveWork'
+import { inputStyle } from '../../styles/formStyles'
 
 interface Props {
   directory: MemoryDirectory | null
@@ -13,7 +14,11 @@ const COLUMNS: { id: AgentEntry['status']; label: string; color: string; dimColo
   { id: 'done',    label: 'Done',     color: 'var(--text-muted)', dimColor: 'rgba(136,136,160,0.08)' },
 ]
 
-function AgentCard({ agent }: { agent: AgentEntry }) {
+function AgentCard({ agent, onDone, onRemove }: {
+  agent: AgentEntry
+  onDone: (agent: AgentEntry) => void
+  onRemove: (agent: AgentEntry) => void
+}) {
   const [expanded, setExpanded] = useState(false)
   const [hovered, setHovered] = useState(false)
   const col = COLUMNS.find(c => c.id === agent.status)!
@@ -69,23 +74,31 @@ function AgentCard({ agent }: { agent: AgentEntry }) {
             </div>
           )}
           {agent.filesTouched.length > 0 && (
-            <div>
+            <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Files touched
               </div>
               {agent.filesTouched.map(f => (
-                <div key={f} style={{
-                  fontSize: 11,
-                  color: 'var(--accent)',
-                  fontFamily: 'var(--font-mono)',
-                  padding: '2px 0',
-                  opacity: 0.8,
-                }}>
+                <div key={f} style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)', padding: '2px 0', opacity: 0.8 }}>
                   {f}
                 </div>
               ))}
             </div>
           )}
+          <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => onDone(agent)}
+              style={{ padding: '4px 10px', background: 'var(--accent-dim)', border: '1px solid rgba(78,255,196,0.25)', borderRadius: 'var(--radius-sm)', color: 'var(--accent)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
+            >
+              ✓ Done + log
+            </button>
+            <button
+              onClick={() => onRemove(agent)}
+              style={{ padding: '4px 10px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
+            >
+              Remove
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -94,12 +107,14 @@ function AgentCard({ agent }: { agent: AgentEntry }) {
 
 export function AgentTracker({ directory, onWrite }: Props) {
   const rawContent = directory?.files.get('active-work.md')?.content ?? ''
+  const worklogContent = directory?.files.get('worklog.md')?.content ?? ''
   const agents = useMemo(() => parseActiveWork(rawContent), [rawContent])
 
   const [newProject, setNewProject] = useState('')
   const [newTask, setNewTask] = useState('')
   const [newDoing, setNewDoing] = useState('')
   const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState(false)
 
   const grouped = useMemo(() => {
     const map: Record<AgentEntry['status'], AgentEntry[]> = { working: [], blocked: [], done: [] }
@@ -107,16 +122,34 @@ export function AgentTracker({ directory, onWrite }: Props) {
     return map
   }, [agents])
 
+  const handleRemoveAgent = async (agent: AgentEntry) => {
+    const updated = rawContent.replace('### ' + agent.rawBlock, '')
+    await onWrite('active-work.md', updated)
+  }
+
+  const handleDoneAgent = async (agent: AgentEntry) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const summary = agent.doing || agent.task
+    const worklogEntry = `\n## ${today} [${agent.project}]\n- ${summary}\n`
+    await onWrite('worklog.md', worklogContent + worklogEntry)
+    await handleRemoveAgent(agent)
+  }
+
   const handleAddAgent = async () => {
     if (!newProject || !newTask) return
+    setAddError(false)
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
     const newBlock = `\n### [${newProject}] - ${newTask}\n- **Started**: ${now}\n- **Doing**: ${newDoing || newTask}\n- **Files touched**: \n- **Status**: working\n`
     const updated = rawContent + newBlock
-    await onWrite('active-work.md', updated)
-    setNewProject('')
-    setNewTask('')
-    setNewDoing('')
-    setAdding(false)
+    const ok = await onWrite('active-work.md', updated)
+    if (ok) {
+      setNewProject('')
+      setNewTask('')
+      setNewDoing('')
+      setAdding(false)
+    } else {
+      setAddError(true)
+    }
   }
 
   return (
@@ -196,6 +229,7 @@ export function AgentTracker({ directory, onWrite }: Props) {
           >
             Add to active-work.md
           </button>
+          {addError && <span style={{ fontSize: 11, color: 'var(--red)', marginTop: 8, display: 'block' }}>Write failed — check directory permissions</span>}
         </div>
       )}
 
@@ -263,7 +297,7 @@ export function AgentTracker({ directory, onWrite }: Props) {
                 </span>
               </div>
               {grouped[col.id].map(agent => (
-                <AgentCard key={agent.id} agent={agent} />
+                <AgentCard key={agent.id} agent={agent} onDone={handleDoneAgent} onRemove={handleRemoveAgent} />
               ))}
               {grouped[col.id].length === 0 && (
                 <div style={{
@@ -285,14 +319,3 @@ export function AgentTracker({ directory, onWrite }: Props) {
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '7px 10px',
-  background: 'var(--bg-overlay)',
-  border: '1px solid var(--border-mid)',
-  borderRadius: 'var(--radius-sm)',
-  color: 'var(--text-primary)',
-  fontSize: 12,
-  fontFamily: 'var(--font-mono)',
-  outline: 'none',
-}

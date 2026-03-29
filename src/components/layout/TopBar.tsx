@@ -57,7 +57,7 @@ export function TopBar({ activeView, onRefresh, lastRefreshed, refreshing }: Pro
       <button
         onClick={onRefresh}
         disabled={refreshing}
-        title="Refresh all files"
+        title="Refresh all files (⌘⇧R)"
         style={{
           width: 30,
           height: 30,

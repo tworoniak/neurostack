@@ -224,17 +224,23 @@ export function Search({ directory, onSelectFile }: Props) {
 
 function highlight(text: string, query: string): React.ReactNode {
   if (!query) return text
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-  if (idx === -1) return text
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark style={{ background: 'var(--accent-dim)', color: 'var(--accent)', borderRadius: 2, padding: '0 2px' }}>
+  const lower = text.toLowerCase()
+  const queryLower = query.toLowerCase()
+  const parts: React.ReactNode[] = []
+  let last = 0
+  let idx = lower.indexOf(queryLower)
+  while (idx !== -1) {
+    if (idx > last) parts.push(text.slice(last, idx))
+    parts.push(
+      <mark key={idx} style={{ background: 'var(--accent-dim)', color: 'var(--accent)', borderRadius: 2, padding: '0 2px' }}>
         {text.slice(idx, idx + query.length)}
       </mark>
-      {text.slice(idx + query.length)}
-    </>
-  )
+    )
+    last = idx + query.length
+    idx = lower.indexOf(queryLower, last)
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return parts.length > 0 ? <>{parts}</> : text
 }
 
 function EmptyState({ icon, message }: { icon: string; message: string }) {
