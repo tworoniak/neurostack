@@ -1,9 +1,11 @@
 import type { ViewId } from '../../types/memory'
 
 const TITLES: Record<ViewId, { label: string; description: string }> = {
+  overview: { label: 'Overview',        description: 'Project health and activity at a glance' },
   editor:   { label: 'File Editor',     description: 'Read and edit memory files directly' },
   agents:   { label: 'Agent Tracker',   description: 'Live multi-agent coordination board' },
   timeline: { label: 'Timeline',        description: 'Decisions log and session history' },
+  gotchas:  { label: 'Gotchas',         description: 'Known bugs and workarounds — check before debugging' },
   search:   { label: 'Search',          description: 'Full-text search across all memory files' },
 }
 

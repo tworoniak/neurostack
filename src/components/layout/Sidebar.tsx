@@ -9,9 +9,11 @@ interface Props {
 }
 
 const NAV: { id: ViewId; label: string; icon: string }[] = [
+  { id: 'overview', label: 'Overview',     icon: '◉' },
   { id: 'editor',  label: 'Files',        icon: '⬡' },
   { id: 'agents',  label: 'Agents',       icon: '◈' },
   { id: 'timeline',label: 'Timeline',     icon: '◎' },
+  { id: 'gotchas', label: 'Gotchas',      icon: '⚠' },
   { id: 'search',  label: 'Search',       icon: '⊹' },
 ]
 

@@ -113,6 +113,7 @@ export function AgentTracker({ directory, onWrite }: Props) {
   const [newProject, setNewProject] = useState('')
   const [newTask, setNewTask] = useState('')
   const [newDoing, setNewDoing] = useState('')
+  const [newFiles, setNewFiles] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(false)
 
@@ -139,13 +140,14 @@ export function AgentTracker({ directory, onWrite }: Props) {
     if (!newProject || !newTask) return
     setAddError(false)
     const now = new Date().toISOString().slice(0, 16).replace('T', ' ')
-    const newBlock = `\n### [${newProject}] - ${newTask}\n- **Started**: ${now}\n- **Doing**: ${newDoing || newTask}\n- **Files touched**: \n- **Status**: working\n`
+    const newBlock = `\n### [${newProject}] - ${newTask}\n- **Started**: ${now}\n- **Doing**: ${newDoing || newTask}\n- **Files touched**: ${newFiles}\n- **Status**: working\n`
     const updated = rawContent + newBlock
     const ok = await onWrite('active-work.md', updated)
     if (ok) {
       setNewProject('')
       setNewTask('')
       setNewDoing('')
+      setNewFiles('')
       setAdding(false)
     } else {
       setAddError(true)
@@ -181,6 +183,28 @@ export function AgentTracker({ directory, onWrite }: Props) {
         </button>
       </div>
 
+      {/* Blocker alert */}
+      {grouped.blocked.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 16px',
+          background: 'var(--red-dim)',
+          border: '1px solid rgba(255,92,92,0.25)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 20,
+        }}>
+          <span style={{ color: 'var(--red)', fontSize: 14, flexShrink: 0 }}>⚠</span>
+          <span style={{ color: 'var(--red)', fontSize: 12, fontWeight: 600 }}>
+            {grouped.blocked.length} agent{grouped.blocked.length !== 1 ? 's' : ''} blocked
+          </span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+            — {grouped.blocked.map(a => `[${a.project}]`).join(', ')}
+          </span>
+        </div>
+      )}
+
       {/* Add agent form */}
       {adding && (
         <div style={{
@@ -212,6 +236,12 @@ export function AgentTracker({ directory, onWrite }: Props) {
             placeholder="Currently doing… (optional)"
             value={newDoing}
             onChange={e => setNewDoing(e.target.value)}
+            style={{ ...inputStyle, width: '100%', marginBottom: 10 }}
+          />
+          <input
+            placeholder="Files touched (comma-separated, optional)"
+            value={newFiles}
+            onChange={e => setNewFiles(e.target.value)}
             style={{ ...inputStyle, width: '100%', marginBottom: 10 }}
           />
           <button
