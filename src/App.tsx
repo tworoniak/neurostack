@@ -9,9 +9,11 @@ import { FileEditor } from './components/views/FileEditor'
 import { AgentTracker } from './components/views/AgentTracker'
 import { Timeline } from './components/views/Timeline'
 import { Search } from './components/views/Search'
+import { Overview } from './components/views/Overview'
+import { Gotchas } from './components/views/Gotchas'
 
 export default function App() {
-  const [activeView, setActiveView] = useState<ViewId>('editor')
+  const [activeView, setActiveView] = useState<ViewId>('overview')
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   // Used to navigate to file editor with a specific file pre-selected
@@ -68,6 +70,9 @@ export default function App() {
             />
 
             <main style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
+              {activeView === 'overview' && (
+                <Overview directory={directory} />
+              )}
               {activeView === 'editor' && (
                 <FileEditor
                   directory={directory}
@@ -81,6 +86,9 @@ export default function App() {
               )}
               {activeView === 'timeline' && (
                 <Timeline directory={directory} onWrite={writeFile} />
+              )}
+              {activeView === 'gotchas' && (
+                <Gotchas directory={directory} onWrite={writeFile} />
               )}
               {activeView === 'search' && (
                 <Search directory={directory} onSelectFile={handleSelectFileFromSearch} />

@@ -26,7 +26,11 @@ export interface WorklogEntry {
 export interface GotchaEntry {
   id: string
   title: string
-  body: string
+  affects: string
+  symptom: string
+  fix: string
+  dateFound: string
+  rawBlock: string
 }
 
 export interface MemoryFile {
@@ -41,7 +45,7 @@ export interface MemoryDirectory {
   files: Map<string, MemoryFile>
 }
 
-export type ViewId = 'editor' | 'agents' | 'timeline' | 'search'
+export type ViewId = 'overview' | 'editor' | 'agents' | 'timeline' | 'gotchas' | 'search'
 
 // File System Access API — not yet in all TypeScript DOM lib versions
 declare global {
