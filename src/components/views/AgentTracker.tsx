@@ -14,6 +14,20 @@ const COLUMNS: { id: AgentEntry['status']; label: string; color: string; dimColo
   { id: 'done',    label: 'Done',     color: 'var(--text-muted)', dimColor: 'rgba(136,136,160,0.08)' },
 ]
 
+function parseStartedMs(s: string): number | null {
+  if (!s) return null
+  const ms = Date.parse(s.replace(' ', 'T'))
+  return isNaN(ms) ? null : ms
+}
+
+function formatAge(hours: number): string {
+  if (hours < 1) return `${Math.round(hours * 60)}m ago`
+  if (hours < 24) return `${Math.round(hours)}h ago`
+  const days = Math.floor(hours / 24)
+  const h = Math.round(hours % 24)
+  return h > 0 ? `${days}d ${h}h ago` : `${days}d ago`
+}
+
 function AgentCard({ agent, onDone, onRemove }: {
   agent: AgentEntry
   onDone: (agent: AgentEntry, summary: string) => void
@@ -24,6 +38,10 @@ function AgentCard({ agent, onDone, onRemove }: {
   const [drafting, setDrafting] = useState(false)
   const [draftSummary, setDraftSummary] = useState('')
   const col = COLUMNS.find(c => c.id === agent.status)!
+
+  const startedMs = parseStartedMs(agent.started)
+  const ageHours = startedMs ? (Date.now() - startedMs) / 3_600_000 : null
+  const isStale = ageHours !== null && ageHours > 24 && agent.status !== 'done'
 
   const startDraft = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -41,9 +59,9 @@ function AgentCard({ agent, onDone, onRemove }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: 'var(--bg-raised)',
-        border: `1px solid ${hovered ? col.color : 'var(--border)'}`,
-        borderLeft: `2px solid ${col.color}`,
+        background: isStale ? 'rgba(255,181,71,0.04)' : 'var(--bg-raised)',
+        border: `1px solid ${isStale ? 'rgba(255,181,71,0.3)' : hovered ? col.color : 'var(--border)'}`,
+        borderLeft: `2px solid ${isStale ? 'var(--amber)' : col.color}`,
         borderRadius: 'var(--radius-md)',
         padding: '12px 14px',
         cursor: 'pointer',
@@ -78,11 +96,17 @@ function AgentCard({ agent, onDone, onRemove }: {
         </div>
       )}
 
+      {ageHours !== null && (
+        <div style={{ fontSize: 10, color: isStale ? 'var(--amber)' : 'var(--text-muted)', marginTop: 4 }}>
+          {isStale && '⚠ stale · '}{formatAge(ageHours)}
+        </div>
+      )}
+
       {expanded && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
           {agent.started && (
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6 }}>
-              started {agent.started}
+              started {agent.started}{ageHours !== null ? ` (${formatAge(ageHours)})` : ''}
             </div>
           )}
           {agent.filesTouched.length > 0 && (
@@ -203,6 +227,26 @@ export function AgentTracker({ directory, onWrite }: Props) {
     await handleRemoveAgent(agent)
   }
 
+  const staleAgents = useMemo(() => agents.filter(a => {
+    if (a.status === 'done') return false
+    const ms = parseStartedMs(a.started)
+    return ms !== null && (Date.now() - ms) / 3_600_000 > 24
+  }), [agents])
+
+  const handleArchiveStale = async () => {
+    if (staleAgents.length === 0) return
+    const today = new Date().toISOString().slice(0, 10)
+    const entries = staleAgents.map(a =>
+      `\n## ${today} [${a.project}]\n- archived stale: ${a.task}\n`
+    ).join('')
+    let updated = rawContent
+    for (const a of staleAgents) {
+      updated = updated.replace('### ' + a.rawBlock, '')
+    }
+    await onWrite('worklog.md', worklogContent + entries)
+    await onWrite('active-work.md', updated)
+  }
+
   const handleAddAgent = async () => {
     if (!newProject || !newTask) return
     setAddError(false)
@@ -233,21 +277,41 @@ export function AgentTracker({ directory, onWrite }: Props) {
             {agents.length} agent{agents.length !== 1 ? 's' : ''} tracked · reads active-work.md
           </div>
         </div>
-        <button
-          onClick={() => setAdding(a => !a)}
-          style={{
-            padding: '6px 14px',
-            background: adding ? 'var(--accent-dim)' : 'var(--bg-overlay)',
-            border: `1px solid ${adding ? 'rgba(78,255,196,0.3)' : 'var(--border-mid)'}`,
-            borderRadius: 'var(--radius-md)',
-            color: adding ? 'var(--accent)' : 'var(--text-secondary)',
-            fontSize: 11,
-            letterSpacing: '0.05em',
-            cursor: 'pointer',
-          }}
-        >
-          {adding ? '✕ Cancel' : '+ Add agent'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {staleAgents.length > 0 && (
+            <button
+              onClick={handleArchiveStale}
+              title={`Archive ${staleAgents.length} stale agent${staleAgents.length !== 1 ? 's' : ''} (>24h old)`}
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(255,181,71,0.08)',
+                border: '1px solid rgba(255,181,71,0.3)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--amber)',
+                fontSize: 11,
+                letterSpacing: '0.05em',
+                cursor: 'pointer',
+              }}
+            >
+              ⚠ Archive stale ({staleAgents.length})
+            </button>
+          )}
+          <button
+            onClick={() => setAdding(a => !a)}
+            style={{
+              padding: '6px 14px',
+              background: adding ? 'var(--accent-dim)' : 'var(--bg-overlay)',
+              border: `1px solid ${adding ? 'rgba(78,255,196,0.3)' : 'var(--border-mid)'}`,
+              borderRadius: 'var(--radius-md)',
+              color: adding ? 'var(--accent)' : 'var(--text-secondary)',
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              cursor: 'pointer',
+            }}
+          >
+            {adding ? '✕ Cancel' : '+ Add agent'}
+          </button>
+        </div>
       </div>
 
       {/* Blocker alert */}

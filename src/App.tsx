@@ -25,7 +25,7 @@ export default function App() {
   // Session guide: show once per browser session after directory connects
   const [showSessionGuide, setShowSessionGuide] = useState(false)
 
-  const { directory, error, loading, restoring, openDirectory, writeFile, refreshAll, refreshFile } = useMemoryFS()
+  const { directory, error, loading, restoring, changedPaths, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile } = useMemoryFS()
 
   // Show session guide once per session when directory first connects
   useEffect(() => {
@@ -108,6 +108,9 @@ export default function App() {
                   directory={directory}
                   onWrite={writeFile}
                   onRefreshFile={refreshFile}
+                  onDelete={deleteFile}
+                  onRename={renameFile}
+                  changedPaths={changedPaths}
                   jumpToPath={editorJumpPath}
                   onJumped={() => setEditorJumpPath(undefined)}
                 />

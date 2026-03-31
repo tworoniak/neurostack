@@ -57,6 +57,7 @@ export function useMemoryFS() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [restoring, setRestoring] = useState(true)
+  const [changedPaths, setChangedPaths] = useState<Set<string>>(new Set())
 
   // On mount: try to restore the last-used directory handle from IndexedDB
   useEffect(() => {
@@ -147,6 +148,7 @@ export function useMemoryFS() {
     if (!directory) return
     const snapshot = directory
     const fresh = new Map<string, MemoryFile>()
+    const changed: string[] = []
 
     async function scanDir(dirHandle: FileSystemDirectoryHandle, prefix = '') {
       for await (const [name, entry] of dirHandle.entries()) {
@@ -158,6 +160,7 @@ export function useMemoryFS() {
           if (!existing || file.lastModified > existing.lastModified) {
             const content = await file.text()
             fresh.set(path, { name, path, content, lastModified: file.lastModified })
+            changed.push(path)
           } else {
             fresh.set(path, existing)
           }
@@ -170,6 +173,7 @@ export function useMemoryFS() {
     try {
       await scanDir(snapshot.handle)
       setDirectory({ ...snapshot, files: fresh })
+      setChangedPaths(new Set(changed))
     } catch (err) {
       handleStaleHandle(err)
     }
@@ -194,5 +198,61 @@ export function useMemoryFS() {
     }
   }, [directory, handleStaleHandle])
 
-  return { directory, error, loading, restoring, openDirectory, writeFile, refreshAll, refreshFile }
+  const deleteFile = useCallback(async (path: string): Promise<boolean> => {
+    if (!directory) return false
+    try {
+      const parts = path.split('/')
+      if (parts.some(p => p === '..' || p === '.' || p === '')) return false
+      let dir = directory.handle
+      for (const part of parts.slice(0, -1)) {
+        dir = await dir.getDirectoryHandle(part)
+      }
+      await dir.removeEntry(parts.at(-1)!)
+      const updated = new Map(directory.files)
+      updated.delete(path)
+      setDirectory({ ...directory, files: updated })
+      return true
+    } catch (err) {
+      handleStaleHandle(err)
+      return false
+    }
+  }, [directory, handleStaleHandle])
+
+  const renameFile = useCallback(async (oldPath: string, newName: string): Promise<string | null> => {
+    if (!directory) return null
+    const file = directory.files.get(oldPath)
+    if (!file) return null
+    const parts = oldPath.split('/')
+    const newPath = [...parts.slice(0, -1), newName].join('/')
+    try {
+      // Write new file
+      const newParts = newPath.split('/')
+      let dir = directory.handle
+      for (const part of newParts.slice(0, -1)) {
+        dir = await dir.getDirectoryHandle(part, { create: true })
+      }
+      const newHandle = await dir.getFileHandle(newParts.at(-1)!, { create: true })
+      const writable = await newHandle.createWritable()
+      await writable.write(file.content)
+      await writable.close()
+      // Remove old file
+      const oldParts = oldPath.split('/')
+      let oldDir = directory.handle
+      for (const part of oldParts.slice(0, -1)) {
+        oldDir = await oldDir.getDirectoryHandle(part)
+      }
+      await oldDir.removeEntry(oldParts.at(-1)!)
+      // Update state
+      const updated = new Map(directory.files)
+      updated.delete(oldPath)
+      updated.set(newPath, { name: newParts.at(-1)!, path: newPath, content: file.content, lastModified: Date.now() })
+      setDirectory({ ...directory, files: updated })
+      return newPath
+    } catch (err) {
+      handleStaleHandle(err)
+      return null
+    }
+  }, [directory, handleStaleHandle])
+
+  return { directory, error, loading, restoring, changedPaths, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile }
 }

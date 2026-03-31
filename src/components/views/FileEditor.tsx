@@ -1,14 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { MemoryDirectory, MemoryFile } from '../../types/memory';
 
 const SAVED_FLASH_MS = 1800;
 
+const GUARDED = new Set(['MEMORY.md', 'active-work.md'])
+
 interface Props {
   directory: MemoryDirectory | null;
   onWrite: (path: string, content: string) => Promise<boolean>;
   onRefreshFile?: (path: string) => Promise<void>;
+  onDelete?: (path: string) => Promise<boolean>;
+  onRename?: (path: string, newName: string) => Promise<string | null>;
+  changedPaths?: Set<string>;
   jumpToPath?: string;
   onJumped?: () => void;
 }
@@ -17,11 +22,26 @@ function FileTree({
   files,
   selected,
   onSelect,
+  changedPaths,
+  onDelete,
+  onRename,
+  onFileDeleted,
+  onFileRenamed,
 }: {
   files: Map<string, MemoryFile>;
   selected: string | null;
   onSelect: (path: string) => void;
+  changedPaths?: Set<string>;
+  onDelete?: (path: string) => Promise<boolean>;
+  onRename?: (path: string, newName: string) => Promise<string | null>;
+  onFileDeleted?: (path: string) => void;
+  onFileRenamed?: (oldPath: string, newPath: string) => void;
 }) {
+  const [hoveredPath, setHoveredPath] = useState<string | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
+
   const grouped = new Map<string, string[]>();
   for (const path of files.keys()) {
     const parts = path.split('/');
@@ -36,8 +56,27 @@ function FileTree({
     return a.localeCompare(b);
   });
 
-  // Flat ordered list of all paths for keyboard navigation
   const allPaths = sorted.flatMap(([, paths]) => paths.sort());
+
+  const handleRenameConfirm = async (path: string) => {
+    if (!onRename || !renameValue.trim()) return;
+    const newName = renameValue.trim().endsWith('.md') ? renameValue.trim() : `${renameValue.trim()}.md`;
+    const newPath = await onRename(path, newName);
+    if (newPath) {
+      onFileRenamed?.(path, newPath);
+      setRenamingPath(null);
+      setRenameValue('');
+    }
+  };
+
+  const handleDeleteConfirm = async (path: string) => {
+    if (!onDelete) return;
+    const ok = await onDelete(path);
+    if (ok) {
+      onFileDeleted?.(path);
+      setConfirmDeletePath(null);
+    }
+  };
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
@@ -64,16 +103,77 @@ function FileTree({
               const name = path.split('/').at(-1)!;
               const active = selected === path;
               const fileDepth = path.split('/').length - 1;
+              const isChanged = changedPaths?.has(path) && !active;
+              const isHovered = hoveredPath === path;
+              const isGuarded = GUARDED.has(name);
+
+              if (renamingPath === path) {
+                return (
+                  <div key={path} style={{ padding: `4px ${16 + fileDepth * 10}px 4px` }}>
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter') await handleRenameConfirm(path);
+                        if (e.key === 'Escape') { setRenamingPath(null); setRenameValue(''); }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '4px 7px',
+                        background: 'var(--bg-overlay)',
+                        border: '1px solid var(--accent)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: 11,
+                        fontFamily: 'var(--font-mono)',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (confirmDeletePath === path) {
+                return (
+                  <div key={path} style={{
+                    padding: `6px ${16 + fileDepth * 10}px 6px`,
+                    background: 'rgba(255,92,92,0.06)',
+                    borderLeft: '2px solid var(--red)',
+                  }}>
+                    <div style={{ fontSize: 10, color: 'var(--red)', marginBottom: 4 }}>
+                      {isGuarded ? `⚠ ${name} is critical — delete anyway?` : `Delete ${name}?`}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => handleDeleteConfirm(path)}
+                        style={{ padding: '2px 8px', background: 'var(--red-dim)', border: '1px solid rgba(255,92,92,0.3)', borderRadius: 3, color: 'var(--red)', fontSize: 10, cursor: 'pointer' }}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeletePath(null)}
+                        style={{ padding: '2px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={path}
                   onClick={() => onSelect(path)}
+                  onMouseEnter={() => setHoveredPath(path)}
+                  onMouseLeave={() => setHoveredPath(null)}
                   onKeyDown={(e) => {
                     const idx = allPaths.indexOf(path);
                     if (e.key === 'ArrowDown') {
                       e.preventDefault();
-                      if (idx < allPaths.length - 1)
-                        onSelect(allPaths[idx + 1]);
+                      if (idx < allPaths.length - 1) onSelect(allPaths[idx + 1]);
                     }
                     if (e.key === 'ArrowUp') {
                       e.preventDefault();
@@ -109,11 +209,22 @@ function FileTree({
                   >
                     {name}
                   </span>
+                  {isChanged && (
+                    <span
+                      title="Changed since last refresh"
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--accent)',
+                        flexShrink: 0,
+                        opacity: 0.75,
+                      }}
+                    />
+                  )}
                   {name === 'MEMORY.md' &&
                     (() => {
-                      const lineCount = (files.get(path)?.content ?? '').split(
-                        '\n',
-                      ).length;
+                      const lineCount = (files.get(path)?.content ?? '').split('\n').length;
                       const color =
                         lineCount >= 190
                           ? 'var(--red)'
@@ -122,18 +233,35 @@ function FileTree({
                             : 'var(--text-muted)';
                       return (
                         <span
-                          style={{
-                            fontSize: 9,
-                            color,
-                            flexShrink: 0,
-                            opacity: 0.85,
-                          }}
+                          style={{ fontSize: 9, color, flexShrink: 0, opacity: 0.85 }}
                           title={`${lineCount} / 200 lines`}
                         >
                           {lineCount}L
                         </span>
                       );
                     })()}
+                  {isHovered && (onRename || onDelete) && (
+                    <span style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                      {onRename && (
+                        <span
+                          title="Rename"
+                          onClick={e => { e.stopPropagation(); setRenameValue(name); setRenamingPath(path); }}
+                          style={{ padding: '1px 4px', borderRadius: 3, color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', lineHeight: 1 }}
+                        >
+                          ✎
+                        </span>
+                      )}
+                      {onDelete && (
+                        <span
+                          title="Delete"
+                          onClick={e => { e.stopPropagation(); setConfirmDeletePath(path); }}
+                          style={{ padding: '1px 4px', borderRadius: 3, color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', lineHeight: 1 }}
+                        >
+                          ×
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -472,6 +600,9 @@ export function FileEditor({
   directory,
   onWrite,
   onRefreshFile,
+  onDelete,
+  onRename,
+  changedPaths,
   jumpToPath,
   onJumped,
 }: Props) {
@@ -486,6 +617,11 @@ export function FileEditor({
   const [creatingFile, setCreatingFile] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [, setHistVersion] = useState(0);
+
+  // Back/forward history
+  const histStack = useRef<string[]>([]);
+  const histIdx = useRef(-1);
 
   useEffect(() => {
     if (!jumpToPath || !directory) return;
@@ -505,7 +641,7 @@ export function FileEditor({
     if (file && !isDirty) setEditContent(file.content);
   }, [selectedPath, directory, isDirty]);
 
-  const navigateTo = (path: string) => {
+  const navigateTo = (path: string, fromHistory = false) => {
     setSelectedPath(path);
     setIsEditing(false);
     setIsDirty(false);
@@ -513,7 +649,17 @@ export function FileEditor({
     setPendingPath(null);
     const file = directory?.files.get(path);
     if (file) setEditContent(file.content);
+    if (!fromHistory) {
+      // Truncate forward history, push new path
+      histStack.current = histStack.current.slice(0, histIdx.current + 1);
+      histStack.current.push(path);
+      histIdx.current = histStack.current.length - 1;
+    }
+    setHistVersion(v => v + 1);
   };
+
+  const canGoBack = histIdx.current > 0;
+  const canGoForward = histIdx.current < histStack.current.length - 1;
 
   const handleSelect = (path: string) => {
     if (isDirty) {
@@ -649,6 +795,23 @@ export function FileEditor({
           files={directory.files}
           selected={selectedPath}
           onSelect={handleSelect}
+          changedPaths={changedPaths}
+          onDelete={onDelete}
+          onRename={onRename}
+          onFileDeleted={(path) => {
+            if (selectedPath === path) {
+              setSelectedPath(null);
+              setEditContent('');
+              setIsDirty(false);
+            }
+          }}
+          onFileRenamed={(oldPath, newPath) => {
+            if (selectedPath === oldPath) {
+              setSelectedPath(newPath);
+              // Update history stack
+              histStack.current = histStack.current.map(p => p === oldPath ? newPath : p);
+            }
+          }}
         />
       </div>
 
@@ -719,6 +882,49 @@ export function FileEditor({
                 flexShrink: 0,
               }}
             >
+              {/* Back / Forward */}
+              <button
+                onClick={() => {
+                  if (!canGoBack) return;
+                  histIdx.current -= 1;
+                  navigateTo(histStack.current[histIdx.current], true);
+                }}
+                disabled={!canGoBack}
+                title="Back"
+                style={{
+                  padding: '2px 7px',
+                  background: 'none',
+                  border: 'none',
+                  color: canGoBack ? 'var(--text-secondary)' : 'var(--text-muted)',
+                  fontSize: 14,
+                  cursor: canGoBack ? 'pointer' : 'default',
+                  opacity: canGoBack ? 1 : 0.35,
+                  lineHeight: 1,
+                }}
+              >
+                ←
+              </button>
+              <button
+                onClick={() => {
+                  if (!canGoForward) return;
+                  histIdx.current += 1;
+                  navigateTo(histStack.current[histIdx.current], true);
+                }}
+                disabled={!canGoForward}
+                title="Forward"
+                style={{
+                  padding: '2px 7px',
+                  background: 'none',
+                  border: 'none',
+                  color: canGoForward ? 'var(--text-secondary)' : 'var(--text-muted)',
+                  fontSize: 14,
+                  cursor: canGoForward ? 'pointer' : 'default',
+                  opacity: canGoForward ? 1 : 0.35,
+                  lineHeight: 1,
+                }}
+              >
+                →
+              </button>
               <span style={{ color: 'var(--accent)', fontSize: 12, flex: 1 }}>
                 {selectedPath}
               </span>
