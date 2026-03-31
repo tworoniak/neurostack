@@ -45,7 +45,7 @@ export interface MemoryDirectory {
   files: Map<string, MemoryFile>
 }
 
-export type ViewId = 'overview' | 'editor' | 'agents' | 'timeline' | 'gotchas' | 'search'
+export type ViewId = 'overview' | 'editor' | 'agents' | 'projects' | 'timeline' | 'gotchas' | 'infra' | 'metrics' | 'search'
 
 // File System Access API — not yet in all TypeScript DOM lib versions
 declare global {

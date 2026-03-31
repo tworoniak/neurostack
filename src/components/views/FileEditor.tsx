@@ -8,6 +8,7 @@ const SAVED_FLASH_MS = 1800;
 interface Props {
   directory: MemoryDirectory | null;
   onWrite: (path: string, content: string) => Promise<boolean>;
+  onRefreshFile?: (path: string) => Promise<void>;
   jumpToPath?: string;
   onJumped?: () => void;
 }
@@ -470,6 +471,7 @@ function EmptyState() {
 export function FileEditor({
   directory,
   onWrite,
+  onRefreshFile,
   jumpToPath,
   onJumped,
 }: Props) {
@@ -483,6 +485,7 @@ export function FileEditor({
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [creatingFile, setCreatingFile] = useState(false);
   const [newFileName, setNewFileName] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!jumpToPath || !directory) return;
@@ -725,6 +728,31 @@ export function FileEditor({
               )}
               {saveError && (
                 <span className='badge badge-blocked'>save failed</span>
+              )}
+              {onRefreshFile && !isDirty && (
+                <button
+                  onClick={async () => {
+                    if (!selectedPath) return
+                    setRefreshing(true)
+                    await onRefreshFile(selectedPath)
+                    setRefreshing(false)
+                  }}
+                  disabled={refreshing}
+                  title="Refresh file from disk"
+                  style={{
+                    padding: '4px 9px',
+                    background: 'var(--bg-overlay)',
+                    border: '1px solid var(--border-mid)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-muted)',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    lineHeight: 1,
+                    opacity: refreshing ? 0.5 : 1,
+                  }}
+                >
+                  ↺
+                </button>
               )}
               <button
                 onClick={() => setIsEditing((e) => !e)}

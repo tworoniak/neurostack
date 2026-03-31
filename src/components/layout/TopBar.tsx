@@ -6,6 +6,9 @@ const TITLES: Record<ViewId, { label: string; description: string }> = {
   agents:   { label: 'Agent Tracker',   description: 'Live multi-agent coordination board' },
   timeline: { label: 'Timeline',        description: 'Decisions log and session history' },
   gotchas:  { label: 'Gotchas',         description: 'Known bugs and workarounds — check before debugging' },
+  projects: { label: 'Projects',        description: 'Status board across all projects' },
+  infra:    { label: 'Infrastructure',  description: 'Ports, services, and environment variable references' },
+  metrics:  { label: 'Metrics',         description: 'Live counters and KPIs from live-metrics.md' },
   search:   { label: 'Search',          description: 'Full-text search across all memory files' },
 }
 

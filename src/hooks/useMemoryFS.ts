@@ -175,5 +175,24 @@ export function useMemoryFS() {
     }
   }, [directory, handleStaleHandle])
 
-  return { directory, error, loading, restoring, openDirectory, writeFile, refreshAll }
+  const refreshFile = useCallback(async (path: string) => {
+    if (!directory) return
+    try {
+      const parts = path.split('/')
+      let dir = directory.handle
+      for (const part of parts.slice(0, -1)) {
+        dir = await dir.getDirectoryHandle(part)
+      }
+      const fileHandle = await dir.getFileHandle(parts.at(-1)!)
+      const file = await fileHandle.getFile()
+      const content = await file.text()
+      const updated = new Map(directory.files)
+      updated.set(path, { name: parts.at(-1)!, path, content, lastModified: file.lastModified })
+      setDirectory({ ...directory, files: updated })
+    } catch (err) {
+      handleStaleHandle(err)
+    }
+  }, [directory, handleStaleHandle])
+
+  return { directory, error, loading, restoring, openDirectory, writeFile, refreshAll, refreshFile }
 }
