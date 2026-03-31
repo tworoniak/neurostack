@@ -128,8 +128,13 @@ export function Overview({ directory }: Props) {
     ].filter((d) => d.value > 0);
   }, [agents]);
 
-  // Heatmap: 52 columns × 7 rows
+  // Heatmap: 53 columns × 7 rows (GitHub-style: column = week, row = day of week)
   const maxCount = Math.max(...heatmapData.map((d) => d.count), 1);
+  // Pad start so first day lands on correct row (0=Sun … 6=Sat)
+  const heatmapStartPad =
+    heatmapData.length > 0
+      ? new Date(heatmapData[0].date + 'T00:00:00').getDay()
+      : 0;
 
   if (!directory) return null;
 
@@ -203,10 +208,14 @@ export function Overview({ directory }: Props) {
             display: 'grid',
             gridTemplateColumns: 'repeat(53, 1fr)',
             gridTemplateRows: 'repeat(7, 10px)',
+            gridAutoFlow: 'column',
             gap: 2,
             width: '100%',
           }}
         >
+          {Array.from({ length: heatmapStartPad }, (_, i) => (
+            <div key={`pad-${i}`} style={{ background: 'transparent' }} />
+          ))}
           {heatmapData.map(({ date, count }) => {
             const opacity = count === 0 ? 0.06 : 0.2 + (count / maxCount) * 0.8;
             return (
