@@ -45,7 +45,19 @@ export interface MemoryDirectory {
   files: Map<string, MemoryFile>
 }
 
-export type ViewId = 'overview' | 'editor' | 'agents' | 'projects' | 'timeline' | 'gotchas' | 'infra' | 'metrics' | 'search'
+export interface ActivityEvent {
+  path: string
+  timestamp: number
+  prevLines: number
+  newLines: number
+}
+
+export interface ProjectEntry {
+  name: string
+  handle: FileSystemDirectoryHandle
+}
+
+export type ViewId = 'overview' | 'editor' | 'agents' | 'projects' | 'timeline' | 'decisions' | 'gotchas' | 'infra' | 'metrics' | 'search' | 'activity'
 
 // File System Access API — not yet in all TypeScript DOM lib versions
 declare global {

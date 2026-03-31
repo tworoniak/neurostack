@@ -1,14 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { MemoryDirectory, MemoryFile } from '../../types/memory';
 
 const SAVED_FLASH_MS = 1800;
 
+const GUARDED = new Set(['MEMORY.md', 'active-work.md'])
+
 interface Props {
   directory: MemoryDirectory | null;
   onWrite: (path: string, content: string) => Promise<boolean>;
   onRefreshFile?: (path: string) => Promise<void>;
+  onDelete?: (path: string) => Promise<boolean>;
+  onRename?: (path: string, newName: string) => Promise<string | null>;
+  changedPaths?: Set<string>;
   jumpToPath?: string;
   onJumped?: () => void;
 }
@@ -17,11 +22,26 @@ function FileTree({
   files,
   selected,
   onSelect,
+  changedPaths,
+  onDelete,
+  onRename,
+  onFileDeleted,
+  onFileRenamed,
 }: {
   files: Map<string, MemoryFile>;
   selected: string | null;
   onSelect: (path: string) => void;
+  changedPaths?: Set<string>;
+  onDelete?: (path: string) => Promise<boolean>;
+  onRename?: (path: string, newName: string) => Promise<string | null>;
+  onFileDeleted?: (path: string) => void;
+  onFileRenamed?: (oldPath: string, newPath: string) => void;
 }) {
+  const [hoveredPath, setHoveredPath] = useState<string | null>(null);
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null);
+
   const grouped = new Map<string, string[]>();
   for (const path of files.keys()) {
     const parts = path.split('/');
@@ -36,8 +56,27 @@ function FileTree({
     return a.localeCompare(b);
   });
 
-  // Flat ordered list of all paths for keyboard navigation
   const allPaths = sorted.flatMap(([, paths]) => paths.sort());
+
+  const handleRenameConfirm = async (path: string) => {
+    if (!onRename || !renameValue.trim()) return;
+    const newName = renameValue.trim().endsWith('.md') ? renameValue.trim() : `${renameValue.trim()}.md`;
+    const newPath = await onRename(path, newName);
+    if (newPath) {
+      onFileRenamed?.(path, newPath);
+      setRenamingPath(null);
+      setRenameValue('');
+    }
+  };
+
+  const handleDeleteConfirm = async (path: string) => {
+    if (!onDelete) return;
+    const ok = await onDelete(path);
+    if (ok) {
+      onFileDeleted?.(path);
+      setConfirmDeletePath(null);
+    }
+  };
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
@@ -64,16 +103,77 @@ function FileTree({
               const name = path.split('/').at(-1)!;
               const active = selected === path;
               const fileDepth = path.split('/').length - 1;
+              const isChanged = changedPaths?.has(path) && !active;
+              const isHovered = hoveredPath === path;
+              const isGuarded = GUARDED.has(name);
+
+              if (renamingPath === path) {
+                return (
+                  <div key={path} style={{ padding: `4px ${16 + fileDepth * 10}px 4px` }}>
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter') await handleRenameConfirm(path);
+                        if (e.key === 'Escape') { setRenamingPath(null); setRenameValue(''); }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '4px 7px',
+                        background: 'var(--bg-overlay)',
+                        border: '1px solid var(--accent)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
+                        fontSize: 11,
+                        fontFamily: 'var(--font-mono)',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (confirmDeletePath === path) {
+                return (
+                  <div key={path} style={{
+                    padding: `6px ${16 + fileDepth * 10}px 6px`,
+                    background: 'rgba(255,92,92,0.06)',
+                    borderLeft: '2px solid var(--red)',
+                  }}>
+                    <div style={{ fontSize: 10, color: 'var(--red)', marginBottom: 4 }}>
+                      {isGuarded ? `⚠ ${name} is critical — delete anyway?` : `Delete ${name}?`}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => handleDeleteConfirm(path)}
+                        style={{ padding: '2px 8px', background: 'var(--red-dim)', border: '1px solid rgba(255,92,92,0.3)', borderRadius: 3, color: 'var(--red)', fontSize: 10, cursor: 'pointer' }}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeletePath(null)}
+                        style={{ padding: '2px 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <button
                   key={path}
                   onClick={() => onSelect(path)}
+                  onMouseEnter={() => setHoveredPath(path)}
+                  onMouseLeave={() => setHoveredPath(null)}
                   onKeyDown={(e) => {
                     const idx = allPaths.indexOf(path);
                     if (e.key === 'ArrowDown') {
                       e.preventDefault();
-                      if (idx < allPaths.length - 1)
-                        onSelect(allPaths[idx + 1]);
+                      if (idx < allPaths.length - 1) onSelect(allPaths[idx + 1]);
                     }
                     if (e.key === 'ArrowUp') {
                       e.preventDefault();
@@ -109,11 +209,22 @@ function FileTree({
                   >
                     {name}
                   </span>
+                  {isChanged && (
+                    <span
+                      title="Changed since last refresh"
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--accent)',
+                        flexShrink: 0,
+                        opacity: 0.75,
+                      }}
+                    />
+                  )}
                   {name === 'MEMORY.md' &&
                     (() => {
-                      const lineCount = (files.get(path)?.content ?? '').split(
-                        '\n',
-                      ).length;
+                      const lineCount = (files.get(path)?.content ?? '').split('\n').length;
                       const color =
                         lineCount >= 190
                           ? 'var(--red)'
@@ -122,18 +233,35 @@ function FileTree({
                             : 'var(--text-muted)';
                       return (
                         <span
-                          style={{
-                            fontSize: 9,
-                            color,
-                            flexShrink: 0,
-                            opacity: 0.85,
-                          }}
+                          style={{ fontSize: 9, color, flexShrink: 0, opacity: 0.85 }}
                           title={`${lineCount} / 200 lines`}
                         >
                           {lineCount}L
                         </span>
                       );
                     })()}
+                  {isHovered && (onRename || onDelete) && (
+                    <span style={{ display: 'flex', gap: 2, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                      {onRename && (
+                        <span
+                          title="Rename"
+                          onClick={e => { e.stopPropagation(); setRenameValue(name); setRenamingPath(path); }}
+                          style={{ padding: '1px 4px', borderRadius: 3, color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', lineHeight: 1 }}
+                        >
+                          ✎
+                        </span>
+                      )}
+                      {onDelete && (
+                        <span
+                          title="Delete"
+                          onClick={e => { e.stopPropagation(); setConfirmDeletePath(path); }}
+                          style={{ padding: '1px 4px', borderRadius: 3, color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', lineHeight: 1 }}
+                        >
+                          ×
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -472,6 +600,9 @@ export function FileEditor({
   directory,
   onWrite,
   onRefreshFile,
+  onDelete,
+  onRename,
+  changedPaths,
   jumpToPath,
   onJumped,
 }: Props) {
@@ -486,6 +617,16 @@ export function FileEditor({
   const [creatingFile, setCreatingFile] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [, setHistVersion] = useState(0);
+  const [showCompact, setShowCompact] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [findIdx, setFindIdx] = useState(0);
+  const findInputRef = useRef<HTMLInputElement>(null);
+
+  // Back/forward history
+  const histStack = useRef<string[]>([]);
+  const histIdx = useRef(-1);
 
   useEffect(() => {
     if (!jumpToPath || !directory) return;
@@ -505,7 +646,26 @@ export function FileEditor({
     if (file && !isDirty) setEditContent(file.content);
   }, [selectedPath, directory, isDirty]);
 
-  const navigateTo = (path: string) => {
+  // Cmd+F / Ctrl+F opens inline find bar
+  useEffect(() => {
+    if (!file) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setFindOpen(true);
+        setTimeout(() => findInputRef.current?.select(), 10);
+      }
+      if (e.key === 'Escape' && findOpen) {
+        setFindOpen(false);
+        setFindQuery('');
+        setFindIdx(0);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedPath, findOpen]);
+
+  const navigateTo = (path: string, fromHistory = false) => {
     setSelectedPath(path);
     setIsEditing(false);
     setIsDirty(false);
@@ -513,7 +673,17 @@ export function FileEditor({
     setPendingPath(null);
     const file = directory?.files.get(path);
     if (file) setEditContent(file.content);
+    if (!fromHistory) {
+      // Truncate forward history, push new path
+      histStack.current = histStack.current.slice(0, histIdx.current + 1);
+      histStack.current.push(path);
+      histIdx.current = histStack.current.length - 1;
+    }
+    setHistVersion(v => v + 1);
   };
+
+  const canGoBack = histIdx.current > 0;
+  const canGoForward = histIdx.current < histStack.current.length - 1;
 
   const handleSelect = (path: string) => {
     if (isDirty) {
@@ -649,6 +819,23 @@ export function FileEditor({
           files={directory.files}
           selected={selectedPath}
           onSelect={handleSelect}
+          changedPaths={changedPaths}
+          onDelete={onDelete}
+          onRename={onRename}
+          onFileDeleted={(path) => {
+            if (selectedPath === path) {
+              setSelectedPath(null);
+              setEditContent('');
+              setIsDirty(false);
+            }
+          }}
+          onFileRenamed={(oldPath, newPath) => {
+            if (selectedPath === oldPath) {
+              setSelectedPath(newPath);
+              // Update history stack
+              histStack.current = histStack.current.map(p => p === oldPath ? newPath : p);
+            }
+          }}
         />
       </div>
 
@@ -719,6 +906,49 @@ export function FileEditor({
                 flexShrink: 0,
               }}
             >
+              {/* Back / Forward */}
+              <button
+                onClick={() => {
+                  if (!canGoBack) return;
+                  histIdx.current -= 1;
+                  navigateTo(histStack.current[histIdx.current], true);
+                }}
+                disabled={!canGoBack}
+                title="Back"
+                style={{
+                  padding: '2px 7px',
+                  background: 'none',
+                  border: 'none',
+                  color: canGoBack ? 'var(--text-secondary)' : 'var(--text-muted)',
+                  fontSize: 14,
+                  cursor: canGoBack ? 'pointer' : 'default',
+                  opacity: canGoBack ? 1 : 0.35,
+                  lineHeight: 1,
+                }}
+              >
+                ←
+              </button>
+              <button
+                onClick={() => {
+                  if (!canGoForward) return;
+                  histIdx.current += 1;
+                  navigateTo(histStack.current[histIdx.current], true);
+                }}
+                disabled={!canGoForward}
+                title="Forward"
+                style={{
+                  padding: '2px 7px',
+                  background: 'none',
+                  border: 'none',
+                  color: canGoForward ? 'var(--text-secondary)' : 'var(--text-muted)',
+                  fontSize: 14,
+                  cursor: canGoForward ? 'pointer' : 'default',
+                  opacity: canGoForward ? 1 : 0.35,
+                  lineHeight: 1,
+                }}
+              >
+                →
+              </button>
               <span style={{ color: 'var(--accent)', fontSize: 12, flex: 1 }}>
                 {selectedPath}
               </span>
@@ -752,6 +982,26 @@ export function FileEditor({
                   }}
                 >
                   ↺
+                </button>
+              )}
+              {/* Compact index button — only for MEMORY.md ≥ 190 lines */}
+              {selectedPath?.endsWith('MEMORY.md') &&
+                (file?.content ?? '').split('\n').length >= 190 && (
+                <button
+                  onClick={() => setShowCompact(true)}
+                  title="Compact the MEMORY.md index — remove stale entries"
+                  style={{
+                    padding: '4px 10px',
+                    background: 'rgba(255,92,92,0.1)',
+                    border: '1px solid rgba(255,92,92,0.3)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--red)',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    letterSpacing: '0.03em',
+                  }}
+                >
+                  Compact index
                 </button>
               )}
               <button
@@ -804,6 +1054,40 @@ export function FileEditor({
                 </>
               )}
             </div>
+            {/* Inline find bar */}
+            {findOpen && (() => {
+              const matches: number[] = []
+              if (findQuery.trim()) {
+                const q = findQuery.toLowerCase()
+                const lines = editContent.split('\n')
+                lines.forEach((line, i) => { if (line.toLowerCase().includes(q)) matches.push(i) })
+              }
+              const safeIdx = matches.length > 0 ? ((findIdx % matches.length) + matches.length) % matches.length : 0
+              return (
+                <div style={{ padding: '6px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-raised)', flexShrink: 0 }}>
+                  <input
+                    ref={findInputRef}
+                    placeholder="Find in file…"
+                    value={findQuery}
+                    onChange={e => { setFindQuery(e.target.value); setFindIdx(0) }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); setFindIdx(i => i + (e.shiftKey ? -1 : 1)) }
+                      if (e.key === 'Escape') { setFindOpen(false); setFindQuery(''); setFindIdx(0) }
+                    }}
+                    style={{ flex: 1, padding: '4px 8px', background: 'var(--bg-overlay)', border: '1px solid var(--border-mid)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-mono)', outline: 'none' }}
+                  />
+                  {findQuery.trim() && (
+                    <span style={{ fontSize: 11, color: matches.length > 0 ? 'var(--accent)' : 'var(--red)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                      {matches.length > 0 ? `${safeIdx + 1} / ${matches.length}` : 'no matches'}
+                    </span>
+                  )}
+                  <button onClick={() => setFindIdx(i => i - 1)} disabled={matches.length === 0} style={{ padding: '2px 7px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>↑</button>
+                  <button onClick={() => setFindIdx(i => i + 1)} disabled={matches.length === 0} style={{ padding: '2px 7px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>↓</button>
+                  <button onClick={() => { setFindOpen(false); setFindQuery(''); setFindIdx(0) }} style={{ padding: '2px 6px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer', lineHeight: 1 }}>×</button>
+                </div>
+              )
+            })()}
+
             <div
               style={{
                 flex: 1,
@@ -840,6 +1124,8 @@ export function FileEditor({
                   }}
                   spellCheck={false}
                 />
+              ) : findOpen && findQuery.trim() ? (
+                <FindResults content={editContent} query={findQuery} matchIdx={findIdx} />
               ) : (
                 <MarkdownPreview content={editContent} />
               )}
@@ -863,6 +1149,158 @@ export function FileEditor({
           </div>
         )}
       </div>
+
+      {/* MEMORY.md compaction modal */}
+      {showCompact && file && (
+        <CompactModal
+          content={file.content}
+          files={directory.files}
+          onConfirm={async (newContent) => {
+            await onWrite(selectedPath!, newContent)
+            setShowCompact(false)
+          }}
+          onClose={() => setShowCompact(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CompactModal({
+  content,
+  files,
+  onConfirm,
+  onClose,
+}: {
+  content: string;
+  files: Map<string, MemoryFile>;
+  onConfirm: (newContent: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const allLines = content.split('\n');
+  const entryIndices: number[] = [];
+  for (let i = 0; i < allLines.length; i++) {
+    if (/^-\s+.*(\.md)/.test(allLines[i])) entryIndices.push(i);
+  }
+
+  const [checked, setChecked] = useState<Set<number>>(() => new Set(entryIndices));
+
+  const toggle = (idx: number) =>
+    setChecked(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+
+  const extractPath = (line: string): string | null => {
+    const linkMatch = line.match(/\]\(([^)]+\.md)\)/);
+    if (linkMatch) return linkMatch[1];
+    const backtickMatch = line.match(/`([^`]+\.md)`/);
+    if (backtickMatch) return backtickMatch[1];
+    return null;
+  };
+
+  const handleConfirm = async () => {
+    const newLines = allLines.filter((_, i) => !entryIndices.includes(i) || checked.has(i));
+    await onConfirm(newLines.join('\n'));
+  };
+
+  const removed = entryIndices.length - checked.size;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-mid)', borderRadius: 'var(--radius-lg)', width: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14 }}>Compact MEMORY.md index</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Uncheck entries to remove. Red = file not found.</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+          {entryIndices.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 12 }}>No index entries found.</div>
+          ) : entryIndices.map(idx => {
+            const line = allLines[idx];
+            const path = extractPath(line);
+            const exists = path ? files.has(path) : true;
+            const isChecked = checked.has(idx);
+            return (
+              <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 0', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
+                <input type="checkbox" checked={isChecked} onChange={() => toggle(idx)} style={{ marginTop: 2, flexShrink: 0, accentColor: 'var(--accent)' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: !exists ? 'var(--red)' : isChecked ? 'var(--text-secondary)' : 'var(--text-muted)', textDecoration: isChecked ? 'none' : 'line-through', opacity: isChecked ? 1 : 0.5, flex: 1 }}>
+                  {line.trim()}
+                  {!exists && <span style={{ color: 'var(--red)', marginLeft: 6, fontSize: 10 }}>· not found</span>}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ flex: 1, fontSize: 11, color: 'var(--text-muted)' }}>{removed > 0 ? `Remove ${removed} entr${removed !== 1 ? 'ies' : 'y'}` : 'No changes'}</span>
+          <button onClick={handleConfirm} disabled={removed === 0} style={{ padding: '6px 16px', background: removed > 0 ? 'var(--accent-dim)' : 'var(--bg-overlay)', border: `1px solid ${removed > 0 ? 'rgba(78,255,196,0.3)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', color: removed > 0 ? 'var(--accent)' : 'var(--text-muted)', fontSize: 11, cursor: removed > 0 ? 'pointer' : 'default' }}>
+            Apply compaction
+          </button>
+          <button onClick={onClose} style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FindResults({ content, query, matchIdx }: { content: string; query: string; matchIdx: number }) {
+  const lines = content.split('\n');
+  const q = query.toLowerCase();
+  const matchLines: number[] = lines.reduce<number[]>((acc, line, i) => {
+    if (line.toLowerCase().includes(q)) acc.push(i);
+    return acc;
+  }, []);
+  const safeIdx = matchLines.length > 0 ? ((matchIdx % matchLines.length) + matchLines.length) % matchLines.length : -1;
+  const currentLine = safeIdx >= 0 ? matchLines[safeIdx] : -1;
+
+  const highlightLine = (line: string) => {
+    const parts: React.ReactNode[] = [];
+    let remaining = line;
+    let offset = 0;
+    while (true) {
+      const idx = remaining.toLowerCase().indexOf(q);
+      if (idx === -1) { parts.push(remaining); break; }
+      if (idx > 0) parts.push(remaining.slice(0, idx));
+      parts.push(
+        <mark key={offset + idx} style={{ background: 'rgba(78,255,196,0.3)', color: 'inherit', borderRadius: 2 }}>
+          {remaining.slice(idx, idx + q.length)}
+        </mark>
+      );
+      remaining = remaining.slice(idx + q.length);
+      offset += idx + q.length;
+    }
+    return parts;
+  };
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7 }}>
+      {lines.map((line, i) => {
+        const isMatch = matchLines.includes(i);
+        const isCurrent = i === currentLine;
+        return (
+          <div
+            key={i}
+            id={isCurrent ? 'find-current' : undefined}
+            ref={isCurrent ? (el => el?.scrollIntoView({ block: 'center' })) : undefined}
+            style={{
+              display: 'flex',
+              gap: 16,
+              padding: '1px 8px',
+              borderRadius: 4,
+              background: isCurrent ? 'rgba(78,255,196,0.1)' : isMatch ? 'rgba(78,255,196,0.04)' : 'transparent',
+              opacity: isMatch ? 1 : 0.35,
+            }}
+          >
+            <span style={{ width: 36, flexShrink: 0, textAlign: 'right', color: 'var(--text-muted)', userSelect: 'none', fontSize: 10 }}>{i + 1}</span>
+            <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{isMatch ? highlightLine(line) : line || '\u00a0'}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

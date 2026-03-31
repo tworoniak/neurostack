@@ -1,26 +1,35 @@
-import type { ViewId } from '../../types/memory'
-import type { MemoryDirectory } from '../../types/memory'
+import { useState } from 'react'
+import type { ViewId, MemoryDirectory, ProjectEntry } from '../../types/memory'
 
 interface Props {
   activeView: ViewId
   onViewChange: (v: ViewId) => void
   directory: MemoryDirectory | null
   onOpen: () => void
+  onBootstrap: (projectName: string) => void
+  projects?: ProjectEntry[]
+  onSwitchProject?: (entry: ProjectEntry) => void
+  onBrowseProjects?: () => void
 }
 
 const NAV: { id: ViewId; label: string; icon: string }[] = [
-  { id: 'overview',  label: 'Overview',  icon: '◉' },
-  { id: 'editor',    label: 'Files',     icon: '⬡' },
-  { id: 'agents',    label: 'Agents',    icon: '◈' },
-  { id: 'projects',  label: 'Projects',  icon: '▣' },
-  { id: 'timeline',  label: 'Timeline',  icon: '◎' },
-  { id: 'gotchas',   label: 'Gotchas',   icon: '⚠' },
-  { id: 'infra',     label: 'Infra',     icon: '⌗' },
-  { id: 'metrics',   label: 'Metrics',   icon: '◫' },
-  { id: 'search',    label: 'Search',    icon: '⊹' },
+  { id: 'overview',   label: 'Overview',   icon: '◉' },
+  { id: 'editor',     label: 'Files',      icon: '⬡' },
+  { id: 'agents',     label: 'Agents',     icon: '◈' },
+  { id: 'projects',   label: 'Projects',   icon: '▣' },
+  { id: 'timeline',   label: 'Timeline',   icon: '◎' },
+  { id: 'decisions',  label: 'Decisions',  icon: '◆' },
+  { id: 'gotchas',    label: 'Gotchas',    icon: '⚠' },
+  { id: 'infra',      label: 'Infra',      icon: '⌗' },
+  { id: 'metrics',    label: 'Metrics',    icon: '◫' },
+  { id: 'activity',   label: 'Activity',   icon: '⟳' },
+  { id: 'search',     label: 'Search',     icon: '⊹' },
 ]
 
-export function Sidebar({ activeView, onViewChange, directory, onOpen }: Props) {
+export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstrap, projects = [], onSwitchProject, onBrowseProjects }: Props) {
+  const [bootstrapping, setBootstrapping] = useState(false)
+  const [projectName, setProjectName] = useState('')
+
   return (
     <aside style={{
       width: 'var(--sidebar-w)',
@@ -92,6 +101,73 @@ export function Sidebar({ activeView, onViewChange, directory, onOpen }: Props) 
             </>
           )}
         </button>
+
+        {/* New project bootstrap — only when not connected */}
+        {!directory && (
+          bootstrapping ? (
+            <div style={{ marginTop: 8 }}>
+              <input
+                autoFocus
+                placeholder="Project name"
+                value={projectName}
+                onChange={e => setProjectName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && projectName.trim()) { onBootstrap(projectName.trim()); setBootstrapping(false); setProjectName('') }
+                  if (e.key === 'Escape') { setBootstrapping(false); setProjectName('') }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  background: 'var(--bg-overlay)',
+                  border: '1px solid var(--accent)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <button
+                  onClick={() => { if (projectName.trim()) { onBootstrap(projectName.trim()); setBootstrapping(false); setProjectName('') } }}
+                  disabled={!projectName.trim()}
+                  style={{ flex: 1, padding: '5px 0', background: projectName.trim() ? 'var(--accent-dim)' : 'var(--bg-overlay)', border: `1px solid ${projectName.trim() ? 'rgba(78,255,196,0.3)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', color: projectName.trim() ? 'var(--accent)' : 'var(--text-muted)', fontSize: 10, cursor: projectName.trim() ? 'pointer' : 'default' }}
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => { setBootstrapping(false); setProjectName('') }}
+                  style={{ padding: '5px 8px', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setBootstrapping(true)}
+              style={{
+                width: '100%',
+                marginTop: 6,
+                padding: '6px 12px',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-muted)',
+                fontSize: 10,
+                letterSpacing: '0.05em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontSize: 10 }}>✦</span>
+              New project
+            </button>
+          )
+        )}
       </div>
 
       {/* Nav */}
@@ -125,6 +201,66 @@ export function Sidebar({ activeView, onViewChange, directory, onOpen }: Props) 
           )
         })}
       </nav>
+
+      {/* Project switcher — when multiple projects loaded */}
+      {projects.length > 0 && (
+        <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Projects</div>
+          {projects.map(p => {
+            const isActive = directory?.handle === p.handle
+            return (
+              <button
+                key={p.name}
+                onClick={() => onSwitchProject?.(p)}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  marginBottom: 2,
+                  background: isActive ? 'var(--accent-dim)' : 'transparent',
+                  border: `1px solid ${isActive ? 'rgba(78,255,196,0.2)' : 'transparent'}`,
+                  borderRadius: 'var(--radius-sm)',
+                  color: isActive ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 11,
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {isActive && <span style={{ marginRight: 5 }}>◉</span>}{p.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Browse projects button — when no projects loaded yet */}
+      {projects.length === 0 && directory && onBrowseProjects && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <button
+            onClick={onBrowseProjects}
+            style={{
+              width: '100%',
+              padding: '6px 10px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-muted)',
+              fontSize: 10,
+              letterSpacing: '0.05em',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span style={{ fontSize: 10 }}>⊞</span>
+            Browse projects
+          </button>
+        </div>
+      )}
 
       {/* Footer */}
       {directory && (

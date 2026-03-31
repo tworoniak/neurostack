@@ -51,6 +51,49 @@ export function Timeline({ directory, onWrite }: Props) {
     }
   }
 
+  const handleCompactWorklog = async () => {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+    const cutoffStr = cutoff.toISOString().slice(0, 10)
+
+    // Split into preamble + date blocks
+    const preambleEnd = worklogContent.search(/^## \d{4}-\d{2}-\d{2}/m)
+    const preamble = preambleEnd >= 0 ? worklogContent.slice(0, preambleEnd) : worklogContent
+    const bodyRaw = preambleEnd >= 0 ? worklogContent.slice(preambleEnd) : ''
+    const blocks = bodyRaw.split(/\n(?=## \d{4}-\d{2}-\d{2})/).map(b => b.trim()).filter(Boolean)
+
+    const recent: string[] = []
+    const oldByMonth = new Map<string, { n: number; projects: Set<string> }>()
+
+    for (const block of blocks) {
+      const dateMatch = block.match(/^## (\d{4}-\d{2}-\d{2})/)
+      if (!dateMatch) continue
+      const date = dateMatch[1]
+      const projectMatch = block.match(/\[(.+?)\]/)
+      const project = projectMatch?.[1] ?? 'unknown'
+      if (date >= cutoffStr) {
+        recent.push(block)
+      } else {
+        const month = date.slice(0, 7)
+        if (!oldByMonth.has(month)) oldByMonth.set(month, { n: 0, projects: new Set() })
+        const m = oldByMonth.get(month)!
+        m.n++
+        m.projects.add(project)
+      }
+    }
+
+    if (oldByMonth.size === 0) return
+
+    const archiveBlocks = Array.from(oldByMonth.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([month, { n, projects }]) =>
+        `## ${month} archive — ${n} session${n !== 1 ? 's' : ''}\n- Archived ${n} session${n !== 1 ? 's' : ''} from [${Array.from(projects).join(', ')}]`
+      )
+
+    const newContent = preamble + archiveBlocks.join('\n\n') + '\n\n' + recent.join('\n\n') + '\n'
+    await onWrite('worklog.md', newContent)
+  }
+
   const handleAddWorklog = async () => {
     if (!wProject || !wSummary) return
     setWError(false)
@@ -92,21 +135,46 @@ export function Timeline({ directory, onWrite }: Props) {
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setShowForm(f => !f)}
-          style={{
-            padding: '6px 14px',
-            background: showForm ? 'var(--accent-dim)' : 'var(--bg-overlay)',
-            border: `1px solid ${showForm ? 'rgba(78,255,196,0.3)' : 'var(--border-mid)'}`,
-            borderRadius: 'var(--radius-md)',
-            color: showForm ? 'var(--accent)' : 'var(--text-secondary)',
-            fontSize: 11,
-            letterSpacing: '0.05em',
-            cursor: 'pointer',
-          }}
-        >
-          {showForm ? '✕ Cancel' : `+ Add ${tab === 'decisions' ? 'decision' : 'session'}`}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {tab === 'worklog' && worklogs.length > 0 && (() => {
+            const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30)
+            const cutoffStr = cutoff.toISOString().slice(0, 10)
+            const oldCount = worklogs.filter(w => w.date < cutoffStr).length
+            return oldCount > 0 ? (
+              <button
+                onClick={handleCompactWorklog}
+                title={`Roll up ${oldCount} entries older than 30 days into monthly archive blocks`}
+                style={{
+                  padding: '6px 14px',
+                  background: 'var(--bg-overlay)',
+                  border: '1px solid var(--border-mid)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-muted)',
+                  fontSize: 11,
+                  letterSpacing: '0.05em',
+                  cursor: 'pointer',
+                }}
+              >
+                ⊘ Compact ({oldCount} old)
+              </button>
+            ) : null
+          })()}
+          <button
+            onClick={() => setShowForm(f => !f)}
+            style={{
+              padding: '6px 14px',
+              background: showForm ? 'var(--accent-dim)' : 'var(--bg-overlay)',
+              border: `1px solid ${showForm ? 'rgba(78,255,196,0.3)' : 'var(--border-mid)'}`,
+              borderRadius: 'var(--radius-md)',
+              color: showForm ? 'var(--accent)' : 'var(--text-secondary)',
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              cursor: 'pointer',
+            }}
+          >
+            {showForm ? '✕ Cancel' : `+ Add ${tab === 'decisions' ? 'decision' : 'session'}`}
+          </button>
+        </div>
       </div>
 
       {/* Add form */}

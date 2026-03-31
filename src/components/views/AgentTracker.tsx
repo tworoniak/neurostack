@@ -6,6 +6,16 @@ import { inputStyle } from '../../styles/formStyles'
 interface Props {
   directory: MemoryDirectory | null
   onWrite: (path: string, content: string) => Promise<boolean>
+  onNavigateToFile?: (path: string) => void
+}
+
+function checkCompliance(agent: AgentEntry): string[] {
+  const issues: string[] = []
+  if (agent.project === 'unknown') issues.push('Missing [project] bracket in header')
+  if (!agent.rawBlock.includes('**Status**')) issues.push('Missing **Status** field')
+  if (!agent.rawBlock.includes('**Started**')) issues.push('Missing **Started** field')
+  else if (agent.started && !/^\d{4}-\d{2}-\d{2}/.test(agent.started)) issues.push('Malformed timestamp (expected YYYY-MM-DD)')
+  return issues
 }
 
 const COLUMNS: { id: AgentEntry['status']; label: string; color: string; dimColor: string }[] = [
@@ -14,16 +24,36 @@ const COLUMNS: { id: AgentEntry['status']; label: string; color: string; dimColo
   { id: 'done',    label: 'Done',     color: 'var(--text-muted)', dimColor: 'rgba(136,136,160,0.08)' },
 ]
 
-function AgentCard({ agent, onDone, onRemove }: {
+function parseStartedMs(s: string): number | null {
+  if (!s) return null
+  const ms = Date.parse(s.replace(' ', 'T'))
+  return isNaN(ms) ? null : ms
+}
+
+function formatAge(hours: number): string {
+  if (hours < 1) return `${Math.round(hours * 60)}m ago`
+  if (hours < 24) return `${Math.round(hours)}h ago`
+  const days = Math.floor(hours / 24)
+  const h = Math.round(hours % 24)
+  return h > 0 ? `${days}d ${h}h ago` : `${days}d ago`
+}
+
+function AgentCard({ agent, onDone, onRemove, onFix }: {
   agent: AgentEntry
   onDone: (agent: AgentEntry, summary: string) => void
   onRemove: (agent: AgentEntry) => void
+  onFix?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [draftSummary, setDraftSummary] = useState('')
   const col = COLUMNS.find(c => c.id === agent.status)!
+
+  const startedMs = parseStartedMs(agent.started)
+  const ageHours = startedMs ? (Date.now() - startedMs) / 3_600_000 : null
+  const isStale = ageHours !== null && ageHours > 24 && agent.status !== 'done'
+  const issues = checkCompliance(agent)
 
   const startDraft = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -41,9 +71,9 @@ function AgentCard({ agent, onDone, onRemove }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: 'var(--bg-raised)',
-        border: `1px solid ${hovered ? col.color : 'var(--border)'}`,
-        borderLeft: `2px solid ${col.color}`,
+        background: isStale ? 'rgba(255,181,71,0.04)' : 'var(--bg-raised)',
+        border: `1px solid ${isStale ? 'rgba(255,181,71,0.3)' : hovered ? col.color : 'var(--border)'}`,
+        borderLeft: `2px solid ${isStale ? 'var(--amber)' : col.color}`,
         borderRadius: 'var(--radius-md)',
         padding: '12px 14px',
         cursor: 'pointer',
@@ -66,6 +96,11 @@ function AgentCard({ agent, onDone, onRemove }: {
         }}>
           [{agent.project}]
         </span>
+        {issues.length > 0 && (
+          <span title={issues.join('\n')} style={{ fontSize: 9, color: 'var(--amber)', border: '1px solid rgba(255,181,71,0.4)', borderRadius: 99, padding: '1px 5px', flexShrink: 0, cursor: 'default' }}>
+            {issues.length} issue{issues.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6, lineHeight: 1.5 }}>
@@ -78,11 +113,33 @@ function AgentCard({ agent, onDone, onRemove }: {
         </div>
       )}
 
+      {ageHours !== null && (
+        <div style={{ fontSize: 10, color: isStale ? 'var(--amber)' : 'var(--text-muted)', marginTop: 4 }}>
+          {isStale && '⚠ stale · '}{formatAge(ageHours)}
+        </div>
+      )}
+
       {expanded && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
           {agent.started && (
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6 }}>
-              started {agent.started}
+              started {agent.started}{ageHours !== null ? ` (${formatAge(ageHours)})` : ''}
+            </div>
+          )}
+          {issues.length > 0 && (
+            <div style={{ padding: '8px 10px', background: 'rgba(255,181,71,0.06)', border: '1px solid rgba(255,181,71,0.2)', borderRadius: 'var(--radius-sm)', marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: 'var(--amber)', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Protocol issues</div>
+              {issues.map(issue => (
+                <div key={issue} style={{ fontSize: 10, color: 'var(--amber)', opacity: 0.85, marginBottom: 2 }}>· {issue}</div>
+              ))}
+              {onFix && (
+                <button
+                  onClick={e => { e.stopPropagation(); onFix() }}
+                  style={{ marginTop: 6, padding: '3px 10px', background: 'rgba(255,181,71,0.1)', border: '1px solid rgba(255,181,71,0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--amber)', fontSize: 10, cursor: 'pointer' }}
+                >
+                  Fix in FileEditor →
+                </button>
+              )}
             </div>
           )}
           {agent.filesTouched.length > 0 && (
@@ -158,10 +215,12 @@ function AgentCard({ agent, onDone, onRemove }: {
   )
 }
 
-export function AgentTracker({ directory, onWrite }: Props) {
+export function AgentTracker({ directory, onWrite, onNavigateToFile }: Props) {
   const rawContent = directory?.files.get('active-work.md')?.content ?? ''
   const worklogContent = directory?.files.get('worklog.md')?.content ?? ''
   const agents = useMemo(() => parseActiveWork(rawContent), [rawContent])
+
+  const [pendingProjectSync, setPendingProjectSync] = useState<{ path: string; project: string; summary: string } | null>(null)
 
   const [newProject, setNewProject] = useState('')
   const [newTask, setNewTask] = useState('')
@@ -201,6 +260,38 @@ export function AgentTracker({ directory, onWrite }: Props) {
     const worklogEntry = `\n## ${today} [${agent.project}]\n- ${summary.trim()}\n`
     await onWrite('worklog.md', worklogContent + worklogEntry)
     await handleRemoveAgent(agent)
+
+    // Offer to sync the project file if it exists
+    if (directory) {
+      const slug = agent.project.toLowerCase().replace(/\s+/g, '-')
+      const candidates = [
+        `projects/${agent.project}.md`,
+        `projects/${slug}.md`,
+        `projects/${agent.project.toLowerCase()}.md`,
+      ]
+      const found = candidates.find(c => directory.files.has(c))
+      if (found) setPendingProjectSync({ path: found, project: agent.project, summary: summary.trim() })
+    }
+  }
+
+  const staleAgents = useMemo(() => agents.filter(a => {
+    if (a.status === 'done') return false
+    const ms = parseStartedMs(a.started)
+    return ms !== null && (Date.now() - ms) / 3_600_000 > 24
+  }), [agents])
+
+  const handleArchiveStale = async () => {
+    if (staleAgents.length === 0) return
+    const today = new Date().toISOString().slice(0, 10)
+    const entries = staleAgents.map(a =>
+      `\n## ${today} [${a.project}]\n- archived stale: ${a.task}\n`
+    ).join('')
+    let updated = rawContent
+    for (const a of staleAgents) {
+      updated = updated.replace('### ' + a.rawBlock, '')
+    }
+    await onWrite('worklog.md', worklogContent + entries)
+    await onWrite('active-work.md', updated)
   }
 
   const handleAddAgent = async () => {
@@ -233,22 +324,84 @@ export function AgentTracker({ directory, onWrite }: Props) {
             {agents.length} agent{agents.length !== 1 ? 's' : ''} tracked · reads active-work.md
           </div>
         </div>
-        <button
-          onClick={() => setAdding(a => !a)}
-          style={{
-            padding: '6px 14px',
-            background: adding ? 'var(--accent-dim)' : 'var(--bg-overlay)',
-            border: `1px solid ${adding ? 'rgba(78,255,196,0.3)' : 'var(--border-mid)'}`,
-            borderRadius: 'var(--radius-md)',
-            color: adding ? 'var(--accent)' : 'var(--text-secondary)',
-            fontSize: 11,
-            letterSpacing: '0.05em',
-            cursor: 'pointer',
-          }}
-        >
-          {adding ? '✕ Cancel' : '+ Add agent'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {staleAgents.length > 0 && (
+            <button
+              onClick={handleArchiveStale}
+              title={`Archive ${staleAgents.length} stale agent${staleAgents.length !== 1 ? 's' : ''} (>24h old)`}
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(255,181,71,0.08)',
+                border: '1px solid rgba(255,181,71,0.3)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--amber)',
+                fontSize: 11,
+                letterSpacing: '0.05em',
+                cursor: 'pointer',
+              }}
+            >
+              ⚠ Archive stale ({staleAgents.length})
+            </button>
+          )}
+          <button
+            onClick={() => setAdding(a => !a)}
+            style={{
+              padding: '6px 14px',
+              background: adding ? 'var(--accent-dim)' : 'var(--bg-overlay)',
+              border: `1px solid ${adding ? 'rgba(78,255,196,0.3)' : 'var(--border-mid)'}`,
+              borderRadius: 'var(--radius-md)',
+              color: adding ? 'var(--accent)' : 'var(--text-secondary)',
+              fontSize: 11,
+              letterSpacing: '0.05em',
+              cursor: 'pointer',
+            }}
+          >
+            {adding ? '✕ Cancel' : '+ Add agent'}
+          </button>
+        </div>
       </div>
+
+      {/* Project file sync prompt */}
+      {pendingProjectSync && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 16px',
+          background: 'var(--accent-dim)',
+          border: '1px solid rgba(78,255,196,0.2)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ color: 'var(--accent)', fontSize: 13, flexShrink: 0 }}>◉</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12, flex: 1 }}>
+            Update <span style={{ color: 'var(--accent)' }}>{pendingProjectSync.path}</span> current work?
+          </span>
+          <button
+            onClick={async () => {
+              const file = directory?.files.get(pendingProjectSync.path)
+              if (!file) { setPendingProjectSync(null); return }
+              const today = new Date().toISOString().slice(0, 10)
+              const replacement = `## Current work\n${pendingProjectSync.summary} (${today})\n`
+              const updated = file.content.match(/^## Current work/m)
+                ? file.content.replace(/^## Current work[\s\S]*?(?=^## |\s*$)/m, replacement + '\n')
+                : file.content + '\n' + replacement
+              await onWrite(pendingProjectSync.path, updated)
+              setPendingProjectSync(null)
+            }}
+            style={{ padding: '4px 12px', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', color: '#0D0D0F', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Update
+          </button>
+          <button
+            onClick={() => setPendingProjectSync(null)}
+            style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}
+          >
+            Skip
+          </button>
+        </div>
+      )}
 
       {/* Blocker alert */}
       {grouped.blocked.length > 0 && (
@@ -423,7 +576,13 @@ export function AgentTracker({ directory, onWrite }: Props) {
                 </span>
               </div>
               {grouped[col.id].map(agent => (
-                <AgentCard key={agent.id} agent={agent} onDone={handleDoneAgent} onRemove={handleRemoveAgent} />
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  onDone={handleDoneAgent}
+                  onRemove={handleRemoveAgent}
+                  onFix={onNavigateToFile ? () => onNavigateToFile('active-work.md') : undefined}
+                />
               ))}
               {grouped[col.id].length === 0 && (
                 <div style={{
