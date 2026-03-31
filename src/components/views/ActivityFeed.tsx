@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import type { ActivityEvent } from '../../types/memory'
 
 interface Props {
   activityLog: ActivityEvent[]
+  onSelectFile?: (path: string) => void
 }
 
 function formatTime(ts: number): string {
@@ -11,7 +13,14 @@ function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-export function ActivityFeed({ activityLog }: Props) {
+export function ActivityFeed({ activityLog, onSelectFile }: Props) {
+  // Tick every 30s to keep relative timestamps fresh
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
   const events = [...activityLog].reverse()
   const atCap = activityLog.length >= 200
 
@@ -56,11 +65,37 @@ export function ActivityFeed({ activityLog }: Props) {
                   {formatTime(ev.timestamp)}
                 </span>
 
-                {/* File path */}
-                <span style={{ flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {folder && <span style={{ opacity: 0.45 }}>{folder}</span>}
-                  <span style={{ color: 'var(--text-primary)' }}>{name}</span>
-                </span>
+                {/* File path — clickable if handler provided */}
+                {onSelectFile ? (
+                  <button
+                    onClick={() => onSelectFile(ev.path)}
+                    title="Open in FileEditor"
+                    style={{
+                      flex: 1,
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 12,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                  >
+                    {folder && <span style={{ opacity: 0.45 }}>{folder}</span>}
+                    <span>{name}</span>
+                  </button>
+                ) : (
+                  <span style={{ flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {folder && <span style={{ opacity: 0.45 }}>{folder}</span>}
+                    <span style={{ color: 'var(--text-primary)' }}>{name}</span>
+                  </span>
+                )}
 
                 {/* Line counts */}
                 <span style={{ width: 80, flexShrink: 0, textAlign: 'right', fontSize: 10, color: 'var(--text-muted)' }}>

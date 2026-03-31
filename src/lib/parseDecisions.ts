@@ -15,11 +15,14 @@ export function parseDecisions(content: string): DecisionEntry[] {
     }
 
     const body = lines.slice(1).join('\n').trim()
+    const statusMatch = body.match(/^-\s+\*\*Status\*\*:\s*(.+)$/im)
+    const status = statusMatch ? statusMatch[1].trim().toLowerCase() : undefined
     entries.push({
       date: dateMatch[1],
       title: dateMatch[2].trim(),
       body,
       slug: dateMatch[2].toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+      status,
     })
   }
 

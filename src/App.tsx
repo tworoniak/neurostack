@@ -230,7 +230,10 @@ export default function App() {
                 <Decisions directory={directory} onWrite={writeFile} />
               )}
               {activeView === 'activity' && (
-                <ActivityFeed activityLog={activityLog} />
+                <ActivityFeed
+                  activityLog={activityLog}
+                  onSelectFile={path => { setEditorJumpPath(path); setActiveView('editor') }}
+                />
               )}
               {activeView === 'search' && (
                 <Search directory={directory} onSelectFile={handleSelectFileFromSearch} />

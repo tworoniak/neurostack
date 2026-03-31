@@ -38,6 +38,39 @@ function GotchaCard({ entry }: { entry: GotchaEntry }) {
         }}>
           {entry.title}
         </span>
+        {entry.resolved ? (
+          <span style={{
+            fontSize: 9,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'var(--accent)',
+            background: 'rgba(78,255,196,0.08)',
+            border: '1px solid rgba(78,255,196,0.2)',
+            borderRadius: 99,
+            padding: '1px 7px',
+            flexShrink: 0,
+            marginTop: 2,
+          }}>
+            resolved
+          </span>
+        ) : (
+          <span style={{
+            fontSize: 9,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'var(--red)',
+            background: 'var(--red-dim)',
+            border: '1px solid rgba(255,92,92,0.2)',
+            borderRadius: 99,
+            padding: '1px 7px',
+            flexShrink: 0,
+            marginTop: 2,
+          }}>
+            open
+          </span>
+        )}
         <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0, marginTop: 1 }}>
           {expanded ? '▴' : '▾'}
         </span>
@@ -90,9 +123,10 @@ function GotchaCard({ entry }: { entry: GotchaEntry }) {
               </div>
             </div>
           )}
-          {entry.dateFound && (
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
-              found {entry.dateFound}
+          {(entry.dateFound || entry.resolved) && (
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, display: 'flex', gap: 12 }}>
+              {entry.dateFound && <span>found {entry.dateFound}</span>}
+              {entry.resolved && <span style={{ color: 'var(--accent)' }}>resolved {entry.resolved}</span>}
             </div>
           )}
         </div>
@@ -103,6 +137,7 @@ function GotchaCard({ entry }: { entry: GotchaEntry }) {
 
 export function Gotchas({ directory, onWrite }: Props) {
   const [query, setQuery] = useState('')
+  const [resolutionFilter, setResolutionFilter] = useState<'all' | 'open' | 'resolved'>('all')
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
   const [affects, setAffects] = useState('')
@@ -114,15 +149,18 @@ export function Gotchas({ directory, onWrite }: Props) {
   const entries = useMemo(() => parseGotchas(rawContent), [rawContent])
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return entries
+    let result = entries
+    if (resolutionFilter === 'open') result = result.filter(e => !e.resolved)
+    if (resolutionFilter === 'resolved') result = result.filter(e => !!e.resolved)
+    if (!query.trim()) return result
     const q = query.toLowerCase()
-    return entries.filter(e =>
+    return result.filter(e =>
       e.title.toLowerCase().includes(q) ||
       e.affects.toLowerCase().includes(q) ||
       e.symptom.toLowerCase().includes(q) ||
       e.fix.toLowerCase().includes(q)
     )
-  }, [entries, query])
+  }, [entries, query, resolutionFilter])
 
   const handleAdd = async () => {
     if (!title || !fix) return
@@ -186,11 +224,32 @@ export function Gotchas({ directory, onWrite }: Props) {
             </button>
           )}
         </div>
-        {query && (
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-            {filtered.length} of {entries.length} gotcha{entries.length !== 1 ? 's' : ''}
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {(['all', 'open', 'resolved'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setResolutionFilter(f)}
+              style={{
+                padding: '2px 10px',
+                background: resolutionFilter === f ? (f === 'resolved' ? 'rgba(78,255,196,0.1)' : f === 'open' ? 'rgba(255,92,92,0.1)' : 'var(--bg-overlay)') : 'transparent',
+                border: `1px solid ${resolutionFilter === f ? (f === 'resolved' ? 'rgba(78,255,196,0.3)' : f === 'open' ? 'rgba(255,92,92,0.3)' : 'var(--border-mid)') : 'var(--border)'}`,
+                borderRadius: 99,
+                color: resolutionFilter === f ? (f === 'resolved' ? 'var(--accent)' : f === 'open' ? 'var(--red)' : 'var(--text-secondary)') : 'var(--text-muted)',
+                fontSize: 10,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {f}
+            </button>
+          ))}
+          {(query || resolutionFilter !== 'all') && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4 }}>
+              {filtered.length} of {entries.length}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* List + form */}
