@@ -38,6 +38,8 @@ If making a tech or architecture decision: check `decisions.md` first.
 ### On session end
 - Remove your entry from `active-work.md`
 - Append a summary to `worklog.md`
+- At session end, update `live-metrics.md` — increment Sessions, update Files Modified 
+  from your filesTouched count
 
 ### Critical rule
 **Write continuously — not just at session end.**

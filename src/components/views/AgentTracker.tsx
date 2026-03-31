@@ -16,12 +16,24 @@ const COLUMNS: { id: AgentEntry['status']; label: string; color: string; dimColo
 
 function AgentCard({ agent, onDone, onRemove }: {
   agent: AgentEntry
-  onDone: (agent: AgentEntry) => void
+  onDone: (agent: AgentEntry, summary: string) => void
   onRemove: (agent: AgentEntry) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+  const [draftSummary, setDraftSummary] = useState('')
   const col = COLUMNS.find(c => c.id === agent.status)!
+
+  const startDraft = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const base = agent.doing || agent.task
+    const files = agent.filesTouched.length > 0
+      ? ` [${agent.filesTouched.join(', ')}]`
+      : ''
+    setDraftSummary(base + files)
+    setDrafting(true)
+  }
 
   return (
     <div
@@ -85,20 +97,61 @@ function AgentCard({ agent, onDone, onRemove }: {
               ))}
             </div>
           )}
-          <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => onDone(agent)}
-              style={{ padding: '4px 10px', background: 'var(--accent-dim)', border: '1px solid rgba(78,255,196,0.25)', borderRadius: 'var(--radius-sm)', color: 'var(--accent)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
-            >
-              ✓ Done + log
-            </button>
-            <button
-              onClick={() => onRemove(agent)}
-              style={{ padding: '4px 10px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
-            >
-              Remove
-            </button>
-          </div>
+          {drafting ? (
+            <div onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Worklog summary
+              </div>
+              <textarea
+                autoFocus
+                value={draftSummary}
+                onChange={e => setDraftSummary(e.target.value)}
+                rows={2}
+                style={{
+                  width: '100%',
+                  background: 'var(--bg-overlay)',
+                  border: '1px solid var(--border-mid)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  padding: '6px 8px',
+                  resize: 'vertical',
+                  marginBottom: 6,
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => { onDone(agent, draftSummary); setDrafting(false) }}
+                  style={{ padding: '4px 10px', background: 'var(--accent-dim)', border: '1px solid rgba(78,255,196,0.25)', borderRadius: 'var(--radius-sm)', color: 'var(--accent)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
+                >
+                  ✓ Confirm + log
+                </button>
+                <button
+                  onClick={() => setDrafting(false)}
+                  style={{ padding: '4px 10px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+              <button
+                onClick={startDraft}
+                style={{ padding: '4px 10px', background: 'var(--accent-dim)', border: '1px solid rgba(78,255,196,0.25)', borderRadius: 'var(--radius-sm)', color: 'var(--accent)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
+              >
+                ✓ Done + log
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); onRemove(agent) }}
+                style={{ padding: '4px 10px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer', letterSpacing: '0.04em' }}
+              >
+                Remove
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -123,15 +176,29 @@ export function AgentTracker({ directory, onWrite }: Props) {
     return map
   }, [agents])
 
+  // Detect overlapping filesTouched across active (non-done) agents
+  const fileConflicts = useMemo(() => {
+    const fileToAgents = new Map<string, AgentEntry[]>()
+    for (const agent of agents.filter(a => a.status !== 'done')) {
+      for (const f of agent.filesTouched) {
+        if (!f) continue
+        if (!fileToAgents.has(f)) fileToAgents.set(f, [])
+        fileToAgents.get(f)!.push(agent)
+      }
+    }
+    return Array.from(fileToAgents.entries())
+      .filter(([, agts]) => agts.length > 1)
+      .map(([file, agts]) => ({ file, agents: agts }))
+  }, [agents])
+
   const handleRemoveAgent = async (agent: AgentEntry) => {
     const updated = rawContent.replace('### ' + agent.rawBlock, '')
     await onWrite('active-work.md', updated)
   }
 
-  const handleDoneAgent = async (agent: AgentEntry) => {
+  const handleDoneAgent = async (agent: AgentEntry, summary: string) => {
     const today = new Date().toISOString().slice(0, 10)
-    const summary = agent.doing || agent.task
-    const worklogEntry = `\n## ${today} [${agent.project}]\n- ${summary}\n`
+    const worklogEntry = `\n## ${today} [${agent.project}]\n- ${summary.trim()}\n`
     await onWrite('worklog.md', worklogContent + worklogEntry)
     await handleRemoveAgent(agent)
   }
@@ -202,6 +269,35 @@ export function AgentTracker({ directory, onWrite }: Props) {
           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
             — {grouped.blocked.map(a => `[${a.project}]`).join(', ')}
           </span>
+        </div>
+      )}
+
+      {/* File conflict warning */}
+      {fileConflicts.length > 0 && (
+        <div style={{
+          padding: '10px 16px',
+          background: 'rgba(255,181,71,0.08)',
+          border: '1px solid rgba(255,181,71,0.25)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 16,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ color: 'var(--amber)', fontSize: 13 }}>⚡</span>
+            <span style={{ color: 'var(--amber)', fontSize: 12, fontWeight: 600 }}>
+              {fileConflicts.length} file conflict{fileConflicts.length !== 1 ? 's' : ''}
+            </span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>— multiple agents touching the same file</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {fileConflicts.map(({ file, agents: conflicting }) => (
+              <div key={file} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--amber)', opacity: 0.85 }}>{file}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  ← {conflicting.map(a => `[${a.project}]`).join(', ')}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

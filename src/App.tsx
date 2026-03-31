@@ -11,6 +11,10 @@ import { Timeline } from './components/views/Timeline'
 import { Search } from './components/views/Search'
 import { Overview } from './components/views/Overview'
 import { Gotchas } from './components/views/Gotchas'
+import { SessionGuide } from './components/views/SessionGuide'
+import { ProjectBoard } from './components/views/ProjectBoard'
+import { InfraView } from './components/views/InfraView'
+import { MetricsView } from './components/views/MetricsView'
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewId>('overview')
@@ -18,8 +22,17 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false)
   // Used to navigate to file editor with a specific file pre-selected
   const [editorJumpPath, setEditorJumpPath] = useState<string | undefined>()
+  // Session guide: show once per browser session after directory connects
+  const [showSessionGuide, setShowSessionGuide] = useState(false)
 
-  const { directory, error, loading, restoring, openDirectory, writeFile, refreshAll } = useMemoryFS()
+  const { directory, error, loading, restoring, openDirectory, writeFile, refreshAll, refreshFile } = useMemoryFS()
+
+  // Show session guide once per session when directory first connects
+  useEffect(() => {
+    if (directory && !sessionStorage.getItem('neurostack_guide_dismissed')) {
+      setShowSessionGuide(true)
+    }
+  }, [directory])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -48,6 +61,16 @@ export default function App() {
     setActiveView('editor')
   }
 
+  const handleGuideNavigate = (path: string) => {
+    setEditorJumpPath(path)
+    setActiveView('editor')
+  }
+
+  const handleGuideDismiss = () => {
+    sessionStorage.setItem('neurostack_guide_dismissed', '1')
+    setShowSessionGuide(false)
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
       <Sidebar
@@ -69,6 +92,13 @@ export default function App() {
               refreshing={refreshing}
             />
 
+            {showSessionGuide && (
+              <SessionGuide
+                onNavigateToFile={handleGuideNavigate}
+                onDismiss={handleGuideDismiss}
+              />
+            )}
+
             <main style={{ flex: 1, overflow: 'hidden', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
               {activeView === 'overview' && (
                 <Overview directory={directory} />
@@ -77,6 +107,7 @@ export default function App() {
                 <FileEditor
                   directory={directory}
                   onWrite={writeFile}
+                  onRefreshFile={refreshFile}
                   jumpToPath={editorJumpPath}
                   onJumped={() => setEditorJumpPath(undefined)}
                 />
@@ -89,6 +120,15 @@ export default function App() {
               )}
               {activeView === 'gotchas' && (
                 <Gotchas directory={directory} onWrite={writeFile} />
+              )}
+              {activeView === 'projects' && (
+                <ProjectBoard directory={directory} onNavigateToFile={path => { setEditorJumpPath(path); setActiveView('editor') }} />
+              )}
+              {activeView === 'infra' && (
+                <InfraView directory={directory} />
+              )}
+              {activeView === 'metrics' && (
+                <MetricsView directory={directory} onWrite={writeFile} />
               )}
               {activeView === 'search' && (
                 <Search directory={directory} onSelectFile={handleSelectFileFromSearch} />
