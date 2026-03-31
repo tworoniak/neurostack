@@ -27,6 +27,7 @@ export function parseGotchas(content: string): GotchaEntry[] {
       symptom: get('symptom'),
       fix,
       dateFound: get('date found'),
+      resolved: get('resolved'),
       rawBlock: block,
     })
   }

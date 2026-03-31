@@ -14,6 +14,7 @@ export interface DecisionEntry {
   title: string
   body: string
   slug: string
+  status?: string
 }
 
 export interface WorklogEntry {
@@ -30,6 +31,7 @@ export interface GotchaEntry {
   symptom: string
   fix: string
   dateFound: string
+  resolved: string
   rawBlock: string
 }
 

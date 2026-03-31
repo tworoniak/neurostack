@@ -16,6 +16,7 @@ function extractTags(body: string): string[] {
 export function Decisions({ directory, onWrite }: Props) {
   const [search, setSearch] = useState('')
   const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [showDeprecated, setShowDeprecated] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [dTitle, setDTitle] = useState('')
   const [dBody, setDBody] = useState('')
@@ -34,8 +35,14 @@ export function Decisions({ directory, onWrite }: Props) {
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
   }, [decisions])
 
+  const deprecatedCount = useMemo(
+    () => decisions.filter(d => d.status === 'deprecated').length,
+    [decisions]
+  )
+
   const filtered = useMemo(() => {
     let result = decisions
+    if (!showDeprecated) result = result.filter(d => d.status !== 'deprecated')
     if (activeTag) result = result.filter(d => extractTags(d.body).includes(activeTag))
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -45,7 +52,7 @@ export function Decisions({ directory, onWrite }: Props) {
       )
     }
     return result
-  }, [decisions, search, activeTag])
+  }, [decisions, search, activeTag, showDeprecated])
 
   const handleAdd = async () => {
     if (!dTitle.trim()) return
@@ -139,6 +146,23 @@ export function Decisions({ directory, onWrite }: Props) {
           onChange={e => setSearch(e.target.value)}
           style={{ ...inputStyle, flex: 1, minWidth: 180 }}
         />
+        {deprecatedCount > 0 && (
+          <button
+            onClick={() => setShowDeprecated(v => !v)}
+            style={{
+              padding: '3px 9px',
+              background: !showDeprecated ? 'rgba(144,144,160,0.15)' : 'var(--bg-raised)',
+              border: `1px solid ${!showDeprecated ? 'rgba(144,144,160,0.35)' : 'var(--border)'}`,
+              borderRadius: 99,
+              color: !showDeprecated ? 'var(--text-secondary)' : 'var(--text-muted)',
+              fontSize: 10,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {showDeprecated ? `hide deprecated (${deprecatedCount})` : `show deprecated (${deprecatedCount})`}
+          </button>
+        )}
         {allTags.slice(0, 8).map(([tag, count]) => (
           <button
             key={tag}
@@ -178,7 +202,7 @@ export function Decisions({ directory, onWrite }: Props) {
           {filtered.map((d, i) => {
             const tags = extractTags(d.body)
             return (
-              <DecisionCard key={d.slug + i} date={d.date} title={d.title} body={d.body} tags={tags} search={search} />
+              <DecisionCard key={d.slug + i} date={d.date} title={d.title} body={d.body} tags={tags} search={search} status={d.status} />
             )
           })}
         </div>
@@ -187,12 +211,13 @@ export function Decisions({ directory, onWrite }: Props) {
   )
 }
 
-function DecisionCard({ date, title, body, tags, search }: {
+function DecisionCard({ date, title, body, tags, search, status }: {
   date: string
   title: string
   body: string
   tags: string[]
   search: string
+  status?: string
 }) {
   const [expanded, setExpanded] = useState(false)
   const preview = body.split('\n').slice(0, 2).join(' ').slice(0, 120)
@@ -218,8 +243,9 @@ function DecisionCard({ date, title, body, tags, search }: {
       style={{
         background: 'var(--bg-raised)',
         border: '1px solid var(--border)',
-        borderLeft: '2px solid var(--accent)',
+        borderLeft: `2px solid ${status === 'deprecated' ? 'var(--border-mid)' : 'var(--accent)'}`,
         borderRadius: 'var(--radius-md)',
+        opacity: status === 'deprecated' ? 0.7 : 1,
         padding: '14px 16px',
         cursor: 'pointer',
         transition: 'border-color 0.12s',
@@ -227,9 +253,25 @@ function DecisionCard({ date, title, body, tags, search }: {
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
         <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{date}</span>
-        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
+        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13, color: status === 'deprecated' ? 'var(--text-muted)' : 'var(--text-primary)', flex: 1 }}>
           {highlight(title)}
         </span>
+        {status === 'deprecated' && (
+          <span style={{
+            fontSize: 9,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'var(--text-muted)',
+            background: 'var(--bg-overlay)',
+            border: '1px solid var(--border)',
+            borderRadius: 99,
+            padding: '1px 7px',
+            flexShrink: 0,
+          }}>
+            deprecated
+          </span>
+        )}
       </div>
 
       {tags.length > 0 && (
