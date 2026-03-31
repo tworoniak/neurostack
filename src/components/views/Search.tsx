@@ -180,35 +180,54 @@ export function Search({ directory, onSelectFile }: Props) {
               </span>
             </button>
 
-            {/* Match lines */}
-            {matches.slice(0, 5).map((r, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: '8px 12px',
-                  background: 'var(--bg-raised)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  marginBottom: 4,
-                  display: 'flex',
-                  gap: 12,
-                  alignItems: 'baseline',
-                }}
-              >
-                <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>
-                  {r.lineNumber}
-                </span>
-                <span style={{
-                  fontSize: 12,
-                  color: 'var(--text-secondary)',
-                  fontFamily: 'var(--font-mono)',
-                  lineHeight: 1.5,
-                  wordBreak: 'break-word',
-                }}>
-                  {highlight(r.matchedLine, query)}
-                </span>
-              </div>
-            ))}
+            {/* Match lines with ±1 context */}
+            {matches.slice(0, 5).map((r, i) => {
+              const lines = r.content.split('\n')
+              const idx = r.lineNumber - 1 // 0-based
+              const prevLine = idx > 0 ? lines[idx - 1] : null
+              const nextLine = idx < lines.length - 1 ? lines[idx + 1] : null
+              return (
+                <div
+                  key={i}
+                  style={{
+                    background: 'var(--bg-raised)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    marginBottom: 4,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {prevLine !== null && prevLine.trim() && (
+                    <div style={{ display: 'flex', gap: 12, padding: '5px 12px', alignItems: 'baseline', opacity: 0.45 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>
+                        {r.lineNumber - 1}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1.5, wordBreak: 'break-word' }}>
+                        {prevLine.trim()}
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 12, padding: '6px 12px', alignItems: 'baseline', background: 'rgba(78,255,196,0.03)' }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>
+                      {r.lineNumber}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', lineHeight: 1.5, wordBreak: 'break-word' }}>
+                      {highlight(r.matchedLine, query)}
+                    </span>
+                  </div>
+                  {nextLine !== null && nextLine.trim() && (
+                    <div style={{ display: 'flex', gap: 12, padding: '5px 12px', alignItems: 'baseline', opacity: 0.45 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>
+                        {r.lineNumber + 1}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1.5, wordBreak: 'break-word' }}>
+                        {nextLine.trim()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
             {matches.length > 5 && (
               <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '4px 12px' }}>

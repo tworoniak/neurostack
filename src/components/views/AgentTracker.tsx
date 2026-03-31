@@ -221,6 +221,7 @@ export function AgentTracker({ directory, onWrite, onNavigateToFile }: Props) {
   const agents = useMemo(() => parseActiveWork(rawContent), [rawContent])
 
   const [pendingProjectSync, setPendingProjectSync] = useState<{ path: string; project: string; summary: string } | null>(null)
+  const [complianceDismissed, setComplianceDismissed] = useState(false)
 
   const [newProject, setNewProject] = useState('')
   const [newTask, setNewTask] = useState('')
@@ -234,6 +235,14 @@ export function AgentTracker({ directory, onWrite, onNavigateToFile }: Props) {
     for (const a of agents) map[a.status].push(a)
     return map
   }, [agents])
+
+  // Compliance issues across all non-done agents
+  const agentsWithIssues = useMemo(() =>
+    agents
+      .filter(a => a.status !== 'done')
+      .map(a => ({ agent: a, issues: checkCompliance(a) }))
+      .filter(({ issues }) => issues.length > 0),
+  [agents])
 
   // Detect overlapping filesTouched across active (non-done) agents
   const fileConflicts = useMemo(() => {
@@ -422,6 +431,34 @@ export function AgentTracker({ directory, onWrite, onNavigateToFile }: Props) {
           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
             — {grouped.blocked.map(a => `[${a.project}]`).join(', ')}
           </span>
+        </div>
+      )}
+
+      {/* Compliance issues banner */}
+      {agentsWithIssues.length > 0 && !complianceDismissed && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 16px',
+          background: 'rgba(255,181,71,0.06)',
+          border: '1px solid rgba(255,181,71,0.25)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 16,
+        }}>
+          <span style={{ color: 'var(--amber)', fontSize: 13, flexShrink: 0 }}>⚑</span>
+          <span style={{ color: 'var(--amber)', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+            {agentsWithIssues.reduce((n, { issues }) => n + issues.length, 0)} compliance issue{agentsWithIssues.reduce((n, { issues }) => n + issues.length, 0) !== 1 ? 's' : ''}
+          </span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 11, flex: 1 }}>
+            — {agentsWithIssues.map(({ agent }) => `[${agent.project}]`).join(', ')}
+          </span>
+          <button
+            onClick={() => setComplianceDismissed(true)}
+            style={{ padding: '2px 8px', background: 'transparent', border: '1px solid rgba(255,181,71,0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--amber)', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}
+          >
+            Dismiss
+          </button>
         </div>
       )}
 

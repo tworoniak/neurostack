@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import type { MemoryDirectory } from '../../types/memory'
 import { parseMetrics, type MetricSection } from '../../lib/parseMetrics'
 
@@ -20,7 +20,27 @@ interface Props {
   onWrite: (path: string, content: string) => Promise<boolean>
 }
 
-function MetricCard({ entry }: { entry: { key: string; value: string; numericValue: number | null } }) {
+function MetricCard({ entry, onSave }: {
+  entry: { key: string; value: string; numericValue: number | null }
+  onSave?: (newValue: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [editValue, setEditValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const startEdit = () => {
+    setEditValue(entry.value)
+    setEditing(true)
+    // focus after next paint
+    setTimeout(() => inputRef.current?.select(), 0)
+  }
+
+  const commitEdit = () => {
+    const trimmed = editValue.trim()
+    if (trimmed && trimmed !== entry.value) onSave?.(trimmed)
+    setEditing(false)
+  }
+
   const isNumeric = entry.numericValue !== null
   const isPercent = entry.value.trim().endsWith('%')
 
@@ -44,17 +64,47 @@ function MetricCard({ entry }: { entry: { key: string; value: string; numericVal
         {entry.key}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-        <span style={{
-          fontSize: isNumeric ? 28 : 16,
-          fontFamily: isNumeric ? 'var(--font-display)' : 'var(--font-mono)',
-          fontWeight: 700,
-          color: 'var(--accent)',
-          lineHeight: 1,
-          letterSpacing: isNumeric ? '-0.02em' : '0',
-        }}>
-          {isNumeric ? entry.numericValue!.toLocaleString() : entry.value}
-        </span>
-        {isPercent && (
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitEdit()
+              if (e.key === 'Escape') setEditing(false)
+            }}
+            onBlur={commitEdit}
+            style={{
+              fontSize: isNumeric ? 24 : 14,
+              fontFamily: isNumeric ? 'var(--font-display)' : 'var(--font-mono)',
+              fontWeight: 700,
+              color: 'var(--accent)',
+              background: 'var(--bg-overlay)',
+              border: '1px solid rgba(78,255,196,0.4)',
+              borderRadius: 4,
+              outline: 'none',
+              padding: '2px 6px',
+              width: '100%',
+            }}
+          />
+        ) : (
+          <span
+            onClick={onSave ? startEdit : undefined}
+            title={onSave ? 'Click to edit' : undefined}
+            style={{
+              fontSize: isNumeric ? 28 : 16,
+              fontFamily: isNumeric ? 'var(--font-display)' : 'var(--font-mono)',
+              fontWeight: 700,
+              color: 'var(--accent)',
+              lineHeight: 1,
+              letterSpacing: isNumeric ? '-0.02em' : '0',
+              cursor: onSave ? 'text' : 'default',
+            }}
+          >
+            {isNumeric ? entry.numericValue!.toLocaleString() : entry.value}
+          </span>
+        )}
+        {!editing && isPercent && (
           <span style={{ fontSize: 14, color: 'var(--accent)', opacity: 0.7, fontFamily: 'var(--font-display)' }}>%</span>
         )}
       </div>
@@ -89,7 +139,10 @@ function MetricCard({ entry }: { entry: { key: string; value: string; numericVal
   )
 }
 
-function SectionBlock({ section }: { section: MetricSection }) {
+function SectionBlock({ section, onSaveMetric }: {
+  section: MetricSection
+  onSaveMetric?: (key: string, newValue: string) => void
+}) {
   return (
     <div style={{ marginBottom: 32 }}>
       <div style={{
@@ -110,7 +163,11 @@ function SectionBlock({ section }: { section: MetricSection }) {
         gap: 10,
       }}>
         {section.metrics.map(m => (
-          <MetricCard key={m.key} entry={m} />
+          <MetricCard
+            key={m.key}
+            entry={m}
+            onSave={onSaveMetric ? (v) => onSaveMetric(m.key, v) : undefined}
+          />
         ))}
       </div>
     </div>
@@ -125,6 +182,21 @@ export function MetricsView({ directory, onWrite }: Props) {
   )
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(false)
+
+  const handleSaveMetric = async (key: string, newValue: string) => {
+    if (!metricsFile) return
+    // Replace the first line matching **key**: anything (bold or plain)
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(`(\\*\\*${escaped}\\*\\*|${escaped}):\\s*.+`, 'i')
+    const updated = metricsFile.content.replace(re, (match) => {
+      // Preserve bold markers if present
+      const isBold = match.trimStart().startsWith('**')
+      return isBold ? `**${key}**: ${newValue}` : `${key}: ${newValue}`
+    })
+    if (updated !== metricsFile.content) {
+      await onWrite('live-metrics.md', updated)
+    }
+  }
 
   const totalMetrics = sections.reduce((n, s) => n + s.metrics.length, 0)
 
@@ -243,7 +315,7 @@ NeuroStack will pick up the change within 4s.`}</pre>
       )}
 
       {/* Sections */}
-      {sections.map(s => <SectionBlock key={s.heading} section={s} />)}
+      {sections.map(s => <SectionBlock key={s.heading} section={s} onSaveMetric={handleSaveMetric} />)}
 
       {metricsFile && sections.length === 0 && (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>

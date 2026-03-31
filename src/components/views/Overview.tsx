@@ -12,7 +12,7 @@ import {
   LineChart,
   Line,
 } from 'recharts';
-import type { MemoryDirectory } from '../../types/memory';
+import type { MemoryDirectory, WorklogEntry } from '../../types/memory';
 import { parseWorklog } from '../../lib/parseWorklog';
 import { parseDecisions } from '../../lib/parseDecisions';
 import { parseActiveWork } from '../../lib/parseActiveWork';
@@ -84,6 +84,7 @@ function SectionLabel({
 
 export function Overview({ directory }: Props) {
   const [dayRange, setDayRange] = useState<DayRange>(30);
+  const [selectedHeatmapDate, setSelectedHeatmapDate] = useState<string | null>(null);
 
   const worklogContent = directory?.files.get('worklog.md')?.content ?? '';
   const decisionsContent = directory?.files.get('decisions.md')?.content ?? '';
@@ -104,6 +105,15 @@ export function Overview({ directory }: Props) {
   );
 
   const heatmapData = useMemo(() => activityByDay(worklogs), [worklogs]);
+  const worklogByDate = useMemo(() => {
+    const map = new Map<string, WorklogEntry[]>();
+    for (const w of worklogs) {
+      const list = map.get(w.date) ?? [];
+      list.push(w);
+      map.set(w.date, list);
+    }
+    return map;
+  }, [worklogs]);
   const projectData = useMemo(
     () => projectActivity(worklogs, dayRange),
     [worklogs, dayRange],
@@ -218,16 +228,19 @@ export function Overview({ directory }: Props) {
           ))}
           {heatmapData.map(({ date, count }) => {
             const opacity = count === 0 ? 0.06 : 0.2 + (count / maxCount) * 0.8;
+            const isSelected = selectedHeatmapDate === date;
             return (
-              <div
+              <button
                 key={date}
+                onClick={() => setSelectedHeatmapDate(d => d === date ? null : date)}
                 title={`${date}: ${count} session${count !== 1 ? 's' : ''}`}
                 style={{
-                  background:
-                    count === 0
-                      ? `rgba(255,255,255,${opacity})`
-                      : `rgba(78,255,196,${opacity})`,
+                  background: count === 0 ? `rgba(255,255,255,${opacity})` : `rgba(78,255,196,${opacity})`,
                   borderRadius: 2,
+                  border: isSelected ? '1px solid var(--accent)' : 'none',
+                  padding: 0,
+                  cursor: count > 0 ? 'pointer' : 'default',
+                  outline: 'none',
                 }}
               />
             );
@@ -257,6 +270,37 @@ export function Overview({ directory }: Props) {
           ))}
           <span style={{ fontSize: 10, color: TEXT_MUT }}>More</span>
         </div>
+
+        {selectedHeatmapDate && (() => {
+          const entries = worklogByDate.get(selectedHeatmapDate) ?? [];
+          return (
+            <div style={{
+              marginTop: 12,
+              padding: '10px 14px',
+              background: 'var(--bg-overlay)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: entries.length > 0 ? 8 : 0 }}>
+                <span style={{ fontSize: 11, color: ACCENT, fontFamily: 'var(--font-mono)', flex: 1 }}>
+                  {selectedHeatmapDate} — {entries.length === 0 ? 'no sessions logged' : `${entries.length} session${entries.length !== 1 ? 's' : ''}`}
+                </span>
+                <button
+                  onClick={() => setSelectedHeatmapDate(null)}
+                  style={{ background: 'none', border: 'none', color: TEXT_MUT, fontSize: 14, cursor: 'pointer', lineHeight: 1, padding: 0 }}
+                >
+                  ×
+                </button>
+              </div>
+              {entries.map((e, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ color: ACCENT, fontFamily: 'var(--font-mono)', flexShrink: 0, opacity: 0.7 }}>[{e.project}]</span>
+                  <span style={{ color: TEXT_SEC }}>{e.summary}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </Card>
 
       {/* Bar chart + Donut */}
