@@ -1,11 +1,17 @@
+import { useState } from 'react'
+
 interface Props {
   onOpen: () => void
+  onBootstrap: (projectName: string) => void
   loading: boolean
   restoring: boolean
   error: string | null
 }
 
-export function Landing({ onOpen, loading, restoring, error }: Props) {
+export function Landing({ onOpen, onBootstrap, loading, restoring, error }: Props) {
+  const [bootstrapping, setBootstrapping] = useState(false)
+  const [projectName, setProjectName] = useState('')
+
   return (
     <div style={{
       flex: 1,
@@ -117,6 +123,74 @@ export function Landing({ onOpen, loading, restoring, error }: Props) {
           '+ Open memory directory'
         )}
       </button>
+
+      {/* Bootstrap new project */}
+      {bootstrapping ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+          <input
+            autoFocus
+            placeholder="Project name"
+            value={projectName}
+            onChange={e => setProjectName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && projectName.trim()) onBootstrap(projectName.trim())
+              if (e.key === 'Escape') { setBootstrapping(false); setProjectName('') }
+            }}
+            style={{
+              padding: '8px 12px',
+              background: 'var(--bg-raised)',
+              border: '1px solid var(--border-mid)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+              fontFamily: 'var(--font-mono)',
+              outline: 'none',
+              width: 180,
+            }}
+          />
+          <button
+            onClick={() => { if (projectName.trim()) onBootstrap(projectName.trim()) }}
+            disabled={!projectName.trim()}
+            style={{
+              padding: '8px 16px',
+              background: projectName.trim() ? 'var(--accent-dim)' : 'var(--bg-overlay)',
+              border: `1px solid ${projectName.trim() ? 'rgba(78,255,196,0.3)' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-md)',
+              color: projectName.trim() ? 'var(--accent)' : 'var(--text-muted)',
+              fontSize: 11,
+              fontFamily: 'var(--font-mono)',
+              cursor: projectName.trim() ? 'pointer' : 'default',
+            }}
+          >
+            Create
+          </button>
+          <button
+            onClick={() => { setBootstrapping(false); setProjectName('') }}
+            style={{ padding: '8px 12px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
+          >
+            ✕
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setBootstrapping(true)}
+          disabled={loading || restoring}
+          style={{
+            marginTop: 10,
+            padding: '8px 24px',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--text-muted)',
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: '0.06em',
+            cursor: 'pointer',
+          }}
+        >
+          ✦ New project
+        </button>
+      )}
 
       {error && (
         <div style={{

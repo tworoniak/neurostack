@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { MemoryFile, MemoryDirectory } from '../types/memory'
+import { getTemplates } from '../lib/bootstrapTemplates'
 
 const DB_NAME = 'neurostack'
 const STORE_NAME = 'handles'
@@ -58,6 +59,7 @@ export function useMemoryFS() {
   const [loading, setLoading] = useState(false)
   const [restoring, setRestoring] = useState(true)
   const [changedPaths, setChangedPaths] = useState<Set<string>>(new Set())
+  const [newFiles, setNewFiles] = useState<string[]>([])
 
   // On mount: try to restore the last-used directory handle from IndexedDB
   useEffect(() => {
@@ -149,6 +151,7 @@ export function useMemoryFS() {
     const snapshot = directory
     const fresh = new Map<string, MemoryFile>()
     const changed: string[] = []
+    const discovered: string[] = []
 
     async function scanDir(dirHandle: FileSystemDirectoryHandle, prefix = '') {
       for await (const [name, entry] of dirHandle.entries()) {
@@ -161,6 +164,7 @@ export function useMemoryFS() {
             const content = await file.text()
             fresh.set(path, { name, path, content, lastModified: file.lastModified })
             changed.push(path)
+            if (!existing) discovered.push(path)
           } else {
             fresh.set(path, existing)
           }
@@ -174,6 +178,7 @@ export function useMemoryFS() {
       await scanDir(snapshot.handle)
       setDirectory({ ...snapshot, files: fresh })
       setChangedPaths(new Set(changed))
+      if (discovered.length > 0) setNewFiles(prev => [...prev, ...discovered.filter(p => !prev.includes(p))])
     } catch (err) {
       handleStaleHandle(err)
     }
@@ -254,5 +259,44 @@ export function useMemoryFS() {
     }
   }, [directory, handleStaleHandle])
 
-  return { directory, error, loading, restoring, changedPaths, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile }
+  const clearNewFile = useCallback((path: string) => {
+    setNewFiles(prev => prev.filter(p => p !== path))
+  }, [])
+
+  const bootstrapDirectory = useCallback(async (projectName: string) => {
+    setLoading(true)
+    try {
+      const handle = await showDirectoryPicker({ mode: 'readwrite' })
+      const templates = getTemplates(projectName)
+      const files = new Map<string, MemoryFile>()
+      for (const tpl of templates) {
+        const parts = tpl.path.split('/')
+        let dir = handle
+        for (const part of parts.slice(0, -1)) {
+          dir = await dir.getDirectoryHandle(part, { create: true })
+        }
+        const fileHandle = await dir.getFileHandle(parts.at(-1)!, { create: true })
+        const writable = await fileHandle.createWritable()
+        await writable.write(tpl.content)
+        await writable.close()
+        files.set(tpl.path, {
+          name: parts.at(-1)!,
+          path: tpl.path,
+          content: tpl.content,
+          lastModified: Date.now(),
+        })
+      }
+      setDirectory({ handle, files })
+      setError(null)
+      saveHandle(handle).catch(() => { /* non-critical */ })
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError('Could not create directory. Please try again.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  return { directory, error, loading, restoring, changedPaths, newFiles, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile, clearNewFile, bootstrapDirectory }
 }

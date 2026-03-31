@@ -618,6 +618,7 @@ export function FileEditor({
   const [newFileName, setNewFileName] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [, setHistVersion] = useState(0);
+  const [showCompact, setShowCompact] = useState(false);
 
   // Back/forward history
   const histStack = useRef<string[]>([]);
@@ -960,6 +961,26 @@ export function FileEditor({
                   ↺
                 </button>
               )}
+              {/* Compact index button — only for MEMORY.md ≥ 190 lines */}
+              {selectedPath?.endsWith('MEMORY.md') &&
+                (file?.content ?? '').split('\n').length >= 190 && (
+                <button
+                  onClick={() => setShowCompact(true)}
+                  title="Compact the MEMORY.md index — remove stale entries"
+                  style={{
+                    padding: '4px 10px',
+                    background: 'rgba(255,92,92,0.1)',
+                    border: '1px solid rgba(255,92,92,0.3)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--red)',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    letterSpacing: '0.03em',
+                  }}
+                >
+                  Compact index
+                </button>
+              )}
               <button
                 onClick={() => setIsEditing((e) => !e)}
                 style={{
@@ -1068,6 +1089,101 @@ export function FileEditor({
             <span>Select a file to view</span>
           </div>
         )}
+      </div>
+
+      {/* MEMORY.md compaction modal */}
+      {showCompact && file && (
+        <CompactModal
+          content={file.content}
+          files={directory.files}
+          onConfirm={async (newContent) => {
+            await onWrite(selectedPath!, newContent)
+            setShowCompact(false)
+          }}
+          onClose={() => setShowCompact(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CompactModal({
+  content,
+  files,
+  onConfirm,
+  onClose,
+}: {
+  content: string;
+  files: Map<string, MemoryFile>;
+  onConfirm: (newContent: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const allLines = content.split('\n');
+  const entryIndices: number[] = [];
+  for (let i = 0; i < allLines.length; i++) {
+    if (/^-\s+.*(\.md)/.test(allLines[i])) entryIndices.push(i);
+  }
+
+  const [checked, setChecked] = useState<Set<number>>(() => new Set(entryIndices));
+
+  const toggle = (idx: number) =>
+    setChecked(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+
+  const extractPath = (line: string): string | null => {
+    const linkMatch = line.match(/\]\(([^)]+\.md)\)/);
+    if (linkMatch) return linkMatch[1];
+    const backtickMatch = line.match(/`([^`]+\.md)`/);
+    if (backtickMatch) return backtickMatch[1];
+    return null;
+  };
+
+  const handleConfirm = async () => {
+    const newLines = allLines.filter((_, i) => !entryIndices.includes(i) || checked.has(i));
+    await onConfirm(newLines.join('\n'));
+  };
+
+  const removed = entryIndices.length - checked.size;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-mid)', borderRadius: 'var(--radius-lg)', width: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14 }}>Compact MEMORY.md index</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Uncheck entries to remove. Red = file not found.</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+          {entryIndices.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: 12 }}>No index entries found.</div>
+          ) : entryIndices.map(idx => {
+            const line = allLines[idx];
+            const path = extractPath(line);
+            const exists = path ? files.has(path) : true;
+            const isChecked = checked.has(idx);
+            return (
+              <label key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 0', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}>
+                <input type="checkbox" checked={isChecked} onChange={() => toggle(idx)} style={{ marginTop: 2, flexShrink: 0, accentColor: 'var(--accent)' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: !exists ? 'var(--red)' : isChecked ? 'var(--text-secondary)' : 'var(--text-muted)', textDecoration: isChecked ? 'none' : 'line-through', opacity: isChecked ? 1 : 0.5, flex: 1 }}>
+                  {line.trim()}
+                  {!exists && <span style={{ color: 'var(--red)', marginLeft: 6, fontSize: 10 }}>· not found</span>}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ flex: 1, fontSize: 11, color: 'var(--text-muted)' }}>{removed > 0 ? `Remove ${removed} entr${removed !== 1 ? 'ies' : 'y'}` : 'No changes'}</span>
+          <button onClick={handleConfirm} disabled={removed === 0} style={{ padding: '6px 16px', background: removed > 0 ? 'var(--accent-dim)' : 'var(--bg-overlay)', border: `1px solid ${removed > 0 ? 'rgba(78,255,196,0.3)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', color: removed > 0 ? 'var(--accent)' : 'var(--text-muted)', fontSize: 11, cursor: removed > 0 ? 'pointer' : 'default' }}>
+            Apply compaction
+          </button>
+          <button onClick={onClose} style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+        </div>
       </div>
     </div>
   );

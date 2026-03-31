@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ViewId } from '../../types/memory'
 import type { MemoryDirectory } from '../../types/memory'
 
@@ -6,6 +7,7 @@ interface Props {
   onViewChange: (v: ViewId) => void
   directory: MemoryDirectory | null
   onOpen: () => void
+  onBootstrap: (projectName: string) => void
 }
 
 const NAV: { id: ViewId; label: string; icon: string }[] = [
@@ -20,7 +22,10 @@ const NAV: { id: ViewId; label: string; icon: string }[] = [
   { id: 'search',    label: 'Search',    icon: '⊹' },
 ]
 
-export function Sidebar({ activeView, onViewChange, directory, onOpen }: Props) {
+export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstrap }: Props) {
+  const [bootstrapping, setBootstrapping] = useState(false)
+  const [projectName, setProjectName] = useState('')
+
   return (
     <aside style={{
       width: 'var(--sidebar-w)',
@@ -92,6 +97,73 @@ export function Sidebar({ activeView, onViewChange, directory, onOpen }: Props) 
             </>
           )}
         </button>
+
+        {/* New project bootstrap — only when not connected */}
+        {!directory && (
+          bootstrapping ? (
+            <div style={{ marginTop: 8 }}>
+              <input
+                autoFocus
+                placeholder="Project name"
+                value={projectName}
+                onChange={e => setProjectName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && projectName.trim()) { onBootstrap(projectName.trim()); setBootstrapping(false); setProjectName('') }
+                  if (e.key === 'Escape') { setBootstrapping(false); setProjectName('') }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  background: 'var(--bg-overlay)',
+                  border: '1px solid var(--accent)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <button
+                  onClick={() => { if (projectName.trim()) { onBootstrap(projectName.trim()); setBootstrapping(false); setProjectName('') } }}
+                  disabled={!projectName.trim()}
+                  style={{ flex: 1, padding: '5px 0', background: projectName.trim() ? 'var(--accent-dim)' : 'var(--bg-overlay)', border: `1px solid ${projectName.trim() ? 'rgba(78,255,196,0.3)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', color: projectName.trim() ? 'var(--accent)' : 'var(--text-muted)', fontSize: 10, cursor: projectName.trim() ? 'pointer' : 'default' }}
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => { setBootstrapping(false); setProjectName('') }}
+                  style={{ padding: '5px 8px', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 10, cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setBootstrapping(true)}
+              style={{
+                width: '100%',
+                marginTop: 6,
+                padding: '6px 12px',
+                background: 'transparent',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-muted)',
+                fontSize: 10,
+                letterSpacing: '0.05em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ fontSize: 10 }}>✦</span>
+              New project
+            </button>
+          )
+        )}
       </div>
 
       {/* Nav */}

@@ -187,6 +187,8 @@ export function AgentTracker({ directory, onWrite }: Props) {
   const worklogContent = directory?.files.get('worklog.md')?.content ?? ''
   const agents = useMemo(() => parseActiveWork(rawContent), [rawContent])
 
+  const [pendingProjectSync, setPendingProjectSync] = useState<{ path: string; project: string; summary: string } | null>(null)
+
   const [newProject, setNewProject] = useState('')
   const [newTask, setNewTask] = useState('')
   const [newDoing, setNewDoing] = useState('')
@@ -225,6 +227,18 @@ export function AgentTracker({ directory, onWrite }: Props) {
     const worklogEntry = `\n## ${today} [${agent.project}]\n- ${summary.trim()}\n`
     await onWrite('worklog.md', worklogContent + worklogEntry)
     await handleRemoveAgent(agent)
+
+    // Offer to sync the project file if it exists
+    if (directory) {
+      const slug = agent.project.toLowerCase().replace(/\s+/g, '-')
+      const candidates = [
+        `projects/${agent.project}.md`,
+        `projects/${slug}.md`,
+        `projects/${agent.project.toLowerCase()}.md`,
+      ]
+      const found = candidates.find(c => directory.files.has(c))
+      if (found) setPendingProjectSync({ path: found, project: agent.project, summary: summary.trim() })
+    }
   }
 
   const staleAgents = useMemo(() => agents.filter(a => {
@@ -313,6 +327,48 @@ export function AgentTracker({ directory, onWrite }: Props) {
           </button>
         </div>
       </div>
+
+      {/* Project file sync prompt */}
+      {pendingProjectSync && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '10px 16px',
+          background: 'var(--accent-dim)',
+          border: '1px solid rgba(78,255,196,0.2)',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ color: 'var(--accent)', fontSize: 13, flexShrink: 0 }}>◉</span>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12, flex: 1 }}>
+            Update <span style={{ color: 'var(--accent)' }}>{pendingProjectSync.path}</span> current work?
+          </span>
+          <button
+            onClick={async () => {
+              const file = directory?.files.get(pendingProjectSync.path)
+              if (!file) { setPendingProjectSync(null); return }
+              const today = new Date().toISOString().slice(0, 10)
+              const replacement = `## Current work\n${pendingProjectSync.summary} (${today})\n`
+              const updated = file.content.match(/^## Current work/m)
+                ? file.content.replace(/^## Current work[\s\S]*?(?=^## |\s*$)/m, replacement + '\n')
+                : file.content + '\n' + replacement
+              await onWrite(pendingProjectSync.path, updated)
+              setPendingProjectSync(null)
+            }}
+            style={{ padding: '4px 12px', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', color: '#0D0D0F', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Update
+          </button>
+          <button
+            onClick={() => setPendingProjectSync(null)}
+            style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}
+          >
+            Skip
+          </button>
+        </div>
+      )}
 
       {/* Blocker alert */}
       {grouped.blocked.length > 0 && (
