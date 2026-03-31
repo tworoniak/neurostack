@@ -619,6 +619,10 @@ export function FileEditor({
   const [refreshing, setRefreshing] = useState(false);
   const [, setHistVersion] = useState(0);
   const [showCompact, setShowCompact] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [findIdx, setFindIdx] = useState(0);
+  const findInputRef = useRef<HTMLInputElement>(null);
 
   // Back/forward history
   const histStack = useRef<string[]>([]);
@@ -641,6 +645,25 @@ export function FileEditor({
     const file = directory.files.get(selectedPath);
     if (file && !isDirty) setEditContent(file.content);
   }, [selectedPath, directory, isDirty]);
+
+  // Cmd+F / Ctrl+F opens inline find bar
+  useEffect(() => {
+    if (!file) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setFindOpen(true);
+        setTimeout(() => findInputRef.current?.select(), 10);
+      }
+      if (e.key === 'Escape' && findOpen) {
+        setFindOpen(false);
+        setFindQuery('');
+        setFindIdx(0);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedPath, findOpen]);
 
   const navigateTo = (path: string, fromHistory = false) => {
     setSelectedPath(path);
@@ -1031,6 +1054,40 @@ export function FileEditor({
                 </>
               )}
             </div>
+            {/* Inline find bar */}
+            {findOpen && (() => {
+              const matches: number[] = []
+              if (findQuery.trim()) {
+                const q = findQuery.toLowerCase()
+                const lines = editContent.split('\n')
+                lines.forEach((line, i) => { if (line.toLowerCase().includes(q)) matches.push(i) })
+              }
+              const safeIdx = matches.length > 0 ? ((findIdx % matches.length) + matches.length) % matches.length : 0
+              return (
+                <div style={{ padding: '6px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-raised)', flexShrink: 0 }}>
+                  <input
+                    ref={findInputRef}
+                    placeholder="Find in file…"
+                    value={findQuery}
+                    onChange={e => { setFindQuery(e.target.value); setFindIdx(0) }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); setFindIdx(i => i + (e.shiftKey ? -1 : 1)) }
+                      if (e.key === 'Escape') { setFindOpen(false); setFindQuery(''); setFindIdx(0) }
+                    }}
+                    style={{ flex: 1, padding: '4px 8px', background: 'var(--bg-overlay)', border: '1px solid var(--border-mid)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'var(--font-mono)', outline: 'none' }}
+                  />
+                  {findQuery.trim() && (
+                    <span style={{ fontSize: 11, color: matches.length > 0 ? 'var(--accent)' : 'var(--red)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                      {matches.length > 0 ? `${safeIdx + 1} / ${matches.length}` : 'no matches'}
+                    </span>
+                  )}
+                  <button onClick={() => setFindIdx(i => i - 1)} disabled={matches.length === 0} style={{ padding: '2px 7px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>↑</button>
+                  <button onClick={() => setFindIdx(i => i + 1)} disabled={matches.length === 0} style={{ padding: '2px 7px', background: 'var(--bg-overlay)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>↓</button>
+                  <button onClick={() => { setFindOpen(false); setFindQuery(''); setFindIdx(0) }} style={{ padding: '2px 6px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer', lineHeight: 1 }}>×</button>
+                </div>
+              )
+            })()}
+
             <div
               style={{
                 flex: 1,
@@ -1067,6 +1124,8 @@ export function FileEditor({
                   }}
                   spellCheck={false}
                 />
+              ) : findOpen && findQuery.trim() ? (
+                <FindResults content={editContent} query={findQuery} matchIdx={findIdx} />
               ) : (
                 <MarkdownPreview content={editContent} />
               )}
@@ -1185,6 +1244,63 @@ function CompactModal({
           <button onClick={onClose} style={{ padding: '6px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FindResults({ content, query, matchIdx }: { content: string; query: string; matchIdx: number }) {
+  const lines = content.split('\n');
+  const q = query.toLowerCase();
+  const matchLines: number[] = lines.reduce<number[]>((acc, line, i) => {
+    if (line.toLowerCase().includes(q)) acc.push(i);
+    return acc;
+  }, []);
+  const safeIdx = matchLines.length > 0 ? ((matchIdx % matchLines.length) + matchLines.length) % matchLines.length : -1;
+  const currentLine = safeIdx >= 0 ? matchLines[safeIdx] : -1;
+
+  const highlightLine = (line: string) => {
+    const parts: React.ReactNode[] = [];
+    let remaining = line;
+    let offset = 0;
+    while (true) {
+      const idx = remaining.toLowerCase().indexOf(q);
+      if (idx === -1) { parts.push(remaining); break; }
+      if (idx > 0) parts.push(remaining.slice(0, idx));
+      parts.push(
+        <mark key={offset + idx} style={{ background: 'rgba(78,255,196,0.3)', color: 'inherit', borderRadius: 2 }}>
+          {remaining.slice(idx, idx + q.length)}
+        </mark>
+      );
+      remaining = remaining.slice(idx + q.length);
+      offset += idx + q.length;
+    }
+    return parts;
+  };
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7 }}>
+      {lines.map((line, i) => {
+        const isMatch = matchLines.includes(i);
+        const isCurrent = i === currentLine;
+        return (
+          <div
+            key={i}
+            id={isCurrent ? 'find-current' : undefined}
+            ref={isCurrent ? (el => el?.scrollIntoView({ block: 'center' })) : undefined}
+            style={{
+              display: 'flex',
+              gap: 16,
+              padding: '1px 8px',
+              borderRadius: 4,
+              background: isCurrent ? 'rgba(78,255,196,0.1)' : isMatch ? 'rgba(78,255,196,0.04)' : 'transparent',
+              opacity: isMatch ? 1 : 0.35,
+            }}
+          >
+            <span style={{ width: 36, flexShrink: 0, textAlign: 'right', color: 'var(--text-muted)', userSelect: 'none', fontSize: 10 }}>{i + 1}</span>
+            <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{isMatch ? highlightLine(line) : line || '\u00a0'}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

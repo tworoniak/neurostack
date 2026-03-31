@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import type { MemoryFile, MemoryDirectory } from '../types/memory'
+import type { MemoryFile, MemoryDirectory, ActivityEvent, ProjectEntry } from '../types/memory'
 import { getTemplates } from '../lib/bootstrapTemplates'
 
 const DB_NAME = 'neurostack'
@@ -60,6 +60,8 @@ export function useMemoryFS() {
   const [restoring, setRestoring] = useState(true)
   const [changedPaths, setChangedPaths] = useState<Set<string>>(new Set())
   const [newFiles, setNewFiles] = useState<string[]>([])
+  const [activityLog, setActivityLog] = useState<ActivityEvent[]>([])
+  const [projects, setProjects] = useState<ProjectEntry[]>([])
 
   // On mount: try to restore the last-used directory handle from IndexedDB
   useEffect(() => {
@@ -152,6 +154,7 @@ export function useMemoryFS() {
     const fresh = new Map<string, MemoryFile>()
     const changed: string[] = []
     const discovered: string[] = []
+    const events: ActivityEvent[] = []
 
     async function scanDir(dirHandle: FileSystemDirectoryHandle, prefix = '') {
       for await (const [name, entry] of dirHandle.entries()) {
@@ -164,7 +167,16 @@ export function useMemoryFS() {
             const content = await file.text()
             fresh.set(path, { name, path, content, lastModified: file.lastModified })
             changed.push(path)
-            if (!existing) discovered.push(path)
+            if (!existing) {
+              discovered.push(path)
+            } else {
+              events.push({
+                path,
+                timestamp: Date.now(),
+                prevLines: existing.content.split('\n').length,
+                newLines: content.split('\n').length,
+              })
+            }
           } else {
             fresh.set(path, existing)
           }
@@ -179,6 +191,7 @@ export function useMemoryFS() {
       setDirectory({ ...snapshot, files: fresh })
       setChangedPaths(new Set(changed))
       if (discovered.length > 0) setNewFiles(prev => [...prev, ...discovered.filter(p => !prev.includes(p))])
+      if (events.length > 0) setActivityLog(prev => [...prev, ...events].slice(-200))
     } catch (err) {
       handleStaleHandle(err)
     }
@@ -259,6 +272,60 @@ export function useMemoryFS() {
     }
   }, [directory, handleStaleHandle])
 
+  const openProjectBrowser = useCallback(async () => {
+    try {
+      const parentHandle = await showDirectoryPicker({ mode: 'readwrite' })
+      const found: ProjectEntry[] = []
+      for await (const [name, entry] of parentHandle.entries()) {
+        if (entry.kind !== 'directory') continue
+        const dir = entry as FileSystemDirectoryHandle
+        let hasMd = false
+        try {
+          for await (const [fname] of dir.entries()) {
+            if (fname.endsWith('.md')) { hasMd = true; break }
+          }
+        } catch { /* no access */ }
+        if (!hasMd) {
+          // check memory/ subdir
+          try {
+            const memDir = await dir.getDirectoryHandle('memory')
+            for await (const [fname] of memDir.entries()) {
+              if (fname.endsWith('.md')) { hasMd = true; break }
+            }
+          } catch { /* no memory subdir */ }
+        }
+        if (hasMd) found.push({ name, handle: dir })
+      }
+      if (found.length > 0) {
+        setProjects(found)
+        // Auto-load first project
+        const files = new Map<string, MemoryFile>()
+        await readDirIntoMap(found[0].handle, files)
+        setDirectory({ handle: found[0].handle, files })
+        setError(null)
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') setError('Could not open project directory.')
+    }
+  }, [])
+
+  const switchProject = useCallback(async (entry: ProjectEntry) => {
+    setLoading(true)
+    try {
+      const permission = await entry.handle.requestPermission({ mode: 'readwrite' })
+      if (permission !== 'granted') return
+      const files = new Map<string, MemoryFile>()
+      await readDirIntoMap(entry.handle, files)
+      setDirectory({ handle: entry.handle, files })
+      setError(null)
+      saveHandle(entry.handle).catch(() => { /* non-critical */ })
+    } catch (err) {
+      handleStaleHandle(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [handleStaleHandle])
+
   const clearNewFile = useCallback((path: string) => {
     setNewFiles(prev => prev.filter(p => p !== path))
   }, [])
@@ -298,5 +365,5 @@ export function useMemoryFS() {
     }
   }, [])
 
-  return { directory, error, loading, restoring, changedPaths, newFiles, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile, clearNewFile, bootstrapDirectory }
+  return { directory, error, loading, restoring, changedPaths, newFiles, activityLog, projects, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile, clearNewFile, bootstrapDirectory, openProjectBrowser, switchProject }
 }

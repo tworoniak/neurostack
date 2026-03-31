@@ -15,6 +15,8 @@ import { SessionGuide } from './components/views/SessionGuide'
 import { ProjectBoard } from './components/views/ProjectBoard'
 import { InfraView } from './components/views/InfraView'
 import { MetricsView } from './components/views/MetricsView'
+import { ActivityFeed } from './components/views/ActivityFeed'
+import { Decisions } from './components/views/Decisions'
 
 function NewFileBanner({ path, inputId, onAdd, onDismiss }: {
   path: string
@@ -81,7 +83,7 @@ export default function App() {
   // Session guide: show once per browser session after directory connects
   const [showSessionGuide, setShowSessionGuide] = useState(false)
 
-  const { directory, error, loading, restoring, changedPaths, newFiles, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile, clearNewFile, bootstrapDirectory } = useMemoryFS()
+  const { directory, error, loading, restoring, changedPaths, newFiles, activityLog, projects, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile, clearNewFile, bootstrapDirectory, openProjectBrowser, switchProject } = useMemoryFS()
 
   // Show session guide once per session when directory first connects
   useEffect(() => {
@@ -135,6 +137,9 @@ export default function App() {
         directory={directory}
         onOpen={openDirectory}
         onBootstrap={bootstrapDirectory}
+        projects={projects}
+        onSwitchProject={switchProject}
+        onBrowseProjects={openProjectBrowser}
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -200,7 +205,11 @@ export default function App() {
                 />
               )}
               {activeView === 'agents' && (
-                <AgentTracker directory={directory} onWrite={writeFile} />
+                <AgentTracker
+                  directory={directory}
+                  onWrite={writeFile}
+                  onNavigateToFile={path => { setEditorJumpPath(path); setActiveView('editor') }}
+                />
               )}
               {activeView === 'timeline' && (
                 <Timeline directory={directory} onWrite={writeFile} />
@@ -216,6 +225,12 @@ export default function App() {
               )}
               {activeView === 'metrics' && (
                 <MetricsView directory={directory} onWrite={writeFile} />
+              )}
+              {activeView === 'decisions' && (
+                <Decisions directory={directory} onWrite={writeFile} />
+              )}
+              {activeView === 'activity' && (
+                <ActivityFeed activityLog={activityLog} />
               )}
               {activeView === 'search' && (
                 <Search directory={directory} onSelectFile={handleSelectFileFromSearch} />
