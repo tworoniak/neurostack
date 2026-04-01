@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, Children } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { MemoryDirectory, MemoryFile } from '../../types/memory';
@@ -283,7 +283,7 @@ function MarkdownPreview({ content }: { content: string }) {
         maxWidth: 780,
       }}
     >
-      <style>{`.md-preview li > p { margin: 0; } .md-preview li > p + p { margin-top: 4px; } .md-preview li.task-list-item > p { flex: 1; min-width: 0; }`}</style>
+      <style>{`.md-preview li > p { margin: 0; } .md-preview li > p + p { margin-top: 4px; }`}</style>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -383,32 +383,24 @@ function MarkdownPreview({ content }: { content: string }) {
           },
           li: ({ children, className }) => {
             const isTask = typeof className === 'string' && className.includes('task-list-item')
+            if (isTask) {
+              const childArray = Children.toArray(children)
+              const checkbox = childArray[0]
+              const content = childArray.slice(1)
+              return (
+                <li style={{ color: 'var(--text-secondary)', marginBottom: 4, display: 'flex', alignItems: 'flex-start' }}>
+                  {checkbox}
+                  <div style={{ flex: 1, minWidth: 0 }}>{content}</div>
+                </li>
+              )
+            }
             return (
-            <li
-              style={{
-                color: 'var(--text-secondary)',
-                marginBottom: 4,
-                paddingLeft: isTask ? 0 : 16,
-                position: 'relative',
-                display: isTask ? 'flex' : undefined,
-                alignItems: isTask ? 'flex-start' : undefined,
-              }}
-            >
-              {!isTask && (
-              <span
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  color: 'var(--accent)',
-                  opacity: 0.6,
-                }}
-              >
-                ·
-              </span>
-              )}
-              {children}
-            </li>
-          )},
+              <li style={{ color: 'var(--text-secondary)', marginBottom: 4, paddingLeft: 16, position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 0, color: 'var(--accent)', opacity: 0.6 }}>·</span>
+                {children}
+              </li>
+            )
+          },
           blockquote: ({ children }) => (
             <blockquote
               style={{
@@ -452,17 +444,19 @@ function MarkdownPreview({ content }: { content: string }) {
             </code>
           ),
           table: ({ children }) => (
-            <table
-              style={{
-                borderCollapse: 'collapse',
-                width: '100%',
-                marginBottom: 16,
-                fontSize: 12,
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              {children}
-            </table>
+            <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+              <table
+                style={{
+                  borderCollapse: 'collapse',
+                  width: 'max-content',
+                  minWidth: '100%',
+                  fontSize: 12,
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {children}
+              </table>
+            </div>
           ),
           th: ({ children }) => (
             <th
@@ -472,6 +466,7 @@ function MarkdownPreview({ content }: { content: string }) {
                 textAlign: 'left',
                 color: 'var(--text-muted)',
                 fontWeight: 500,
+                verticalAlign: 'top',
               }}
             >
               {children}
@@ -483,6 +478,7 @@ function MarkdownPreview({ content }: { content: string }) {
                 borderBottom: '1px solid var(--border)',
                 padding: '6px 12px',
                 color: 'var(--text-secondary)',
+                verticalAlign: 'top',
               }}
             >
               {children}
