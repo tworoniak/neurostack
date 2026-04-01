@@ -275,6 +275,7 @@ function FileTree({
 function MarkdownPreview({ content }: { content: string }) {
   return (
     <div
+      className="md-preview"
       style={{
         flex: 1,
         overflowY: 'auto',
@@ -282,6 +283,7 @@ function MarkdownPreview({ content }: { content: string }) {
         maxWidth: 780,
       }}
     >
+      <style>{`.md-preview li > p { margin: 0; } .md-preview li > p + p { margin-top: 4px; } .md-preview li.task-list-item > p { flex: 1; min-width: 0; }`}</style>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -369,9 +371,7 @@ function MarkdownPreview({ content }: { content: string }) {
                 background: checked ? 'var(--accent)' : 'transparent',
                 marginRight: 6,
                 flexShrink: 0,
-                verticalAlign: 'middle',
-                position: 'relative',
-                top: -1,
+                marginTop: 3,
               }}>
                 {checked && (
                   <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
@@ -391,7 +391,7 @@ function MarkdownPreview({ content }: { content: string }) {
                 paddingLeft: isTask ? 0 : 16,
                 position: 'relative',
                 display: isTask ? 'flex' : undefined,
-                alignItems: isTask ? 'center' : undefined,
+                alignItems: isTask ? 'flex-start' : undefined,
               }}
             >
               {!isTask && (
