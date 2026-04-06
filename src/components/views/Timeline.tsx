@@ -18,16 +18,19 @@ export function Timeline({ directory, onWrite }: Props) {
   // Decision form state
   const [dTitle, setDTitle] = useState('')
   const [dBody, setDBody] = useState('')
+  const [dDate, setDDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [dError, setDError] = useState(false)
 
   // Worklog form state
   const [wProject, setWProject] = useState('')
   const [wSummary, setWSummary] = useState('')
+  const [wDate, setWDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [wError, setWError] = useState(false)
 
   useEffect(() => {
-    setDTitle(''); setDBody(''); setDError(false)
-    setWProject(''); setWSummary(''); setWError(false)
+    const today = new Date().toISOString().slice(0, 10)
+    setDTitle(''); setDBody(''); setDDate(today); setDError(false)
+    setWProject(''); setWSummary(''); setWDate(today); setWError(false)
   }, [tab])
 
   const decisionsContent = directory?.files.get('decisions.md')?.content ?? ''
@@ -39,12 +42,12 @@ export function Timeline({ directory, onWrite }: Props) {
   const handleAddDecision = async () => {
     if (!dTitle) return
     setDError(false)
-    const today = new Date().toISOString().slice(0, 10)
-    const entry = `\n## ${today} - ${dTitle}\n${dBody || '- No additional notes.'}\n`
+    const entry = `\n## ${dDate} - ${dTitle}\n${dBody || '- No additional notes.'}\n`
     const ok = await onWrite('decisions.md', decisionsContent + entry)
     if (ok) {
       setDTitle('')
       setDBody('')
+      setDDate(new Date().toISOString().slice(0, 10))
       setShowForm(false)
     } else {
       setDError(true)
@@ -97,12 +100,12 @@ export function Timeline({ directory, onWrite }: Props) {
   const handleAddWorklog = async () => {
     if (!wProject || !wSummary) return
     setWError(false)
-    const today = new Date().toISOString().slice(0, 10)
-    const entry = `\n## ${today} [${wProject}]\n- ${wSummary}\n`
+    const entry = `\n## ${wDate} [${wProject}]\n- ${wSummary}\n`
     const ok = await onWrite('worklog.md', worklogContent + entry)
     if (ok) {
       setWProject('')
       setWSummary('')
+      setWDate(new Date().toISOString().slice(0, 10))
       setShowForm(false)
     } else {
       setWError(true)
@@ -181,12 +184,20 @@ export function Timeline({ directory, onWrite }: Props) {
       {showForm && tab === 'decisions' && (
         <div style={formCard} className="fade-up">
           <div style={formLabel}>New decision</div>
-          <input
-            placeholder="What was decided?"
-            value={dTitle}
-            onChange={e => setDTitle(e.target.value)}
-            style={{ ...inputStyle, width: '100%', marginBottom: 8 }}
-          />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              placeholder="What was decided?"
+              value={dTitle}
+              onChange={e => setDTitle(e.target.value)}
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <input
+              type="date"
+              value={dDate}
+              onChange={e => setDDate(e.target.value)}
+              style={{ ...inputStyle, width: 130, flexShrink: 0 }}
+            />
+          </div>
           <textarea
             placeholder="- Chose X over Y&#10;- Reason: …&#10;- Constraints: …"
             value={dBody}
@@ -218,6 +229,12 @@ export function Timeline({ directory, onWrite }: Props) {
               value={wSummary}
               onChange={e => setWSummary(e.target.value)}
               style={{ ...inputStyle, flex: 2 }}
+            />
+            <input
+              type="date"
+              value={wDate}
+              onChange={e => setWDate(e.target.value)}
+              style={{ ...inputStyle, width: 130, flexShrink: 0 }}
             />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

@@ -13,6 +13,7 @@ export function useFileWatcher(
 
     const start = () => {
       if (timerRef.current) return;
+      if (intervalMs === 0) return; // manual-only mode
       timerRef.current = setInterval(onRefresh, intervalMs);
     };
 

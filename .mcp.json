@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "neurostack": {
+      "command": "node",
+      "args": [
+        "/Users/thomasworoniak/Downloads/WebDevelopment/MyProjects/neurostack/mcp-server/dist/index.js",
+        "/Users/thomasworoniak/.claude/projects/-Users-thomasworoniak-Downloads-WebDevelopment-MyProjects-neurostack/memory"
+      ]
+    }
+  }
+}

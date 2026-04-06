@@ -1,0 +1,19 @@
+{
+  "name": "neurostack-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local MCP server wrapping the NeuroStack memory directory",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "@types/node": "^22.0.0"
+  }
+}
