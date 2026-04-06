@@ -6,6 +6,18 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Insert a new entry at the top of the entry list, after any preamble
+ * (title, description lines) and before the first existing ## entry.
+ */
+function prependEntry(existing: string, entry: string): string {
+  const idx = existing.search(/^## /m);
+  if (idx === -1) {
+    return existing.trimEnd() + entry;
+  }
+  return existing.slice(0, idx).trimEnd() + entry + "\n" + existing.slice(idx);
+}
+
 export function registerWorklogTools(server: McpServer, memoryDir: string): void {
   server.tool(
     "append_worklog",
@@ -28,7 +40,7 @@ export function registerWorklogTools(server: McpServer, memoryDir: string): void
       const filesLine = files_touched ? `\n  - Files: ${files_touched}` : "";
       const entry = `\n## ${date} [${project}]\n- ${summary}${filesLine}\n`;
 
-      await atomicWrite(abs, content.trimEnd() + entry);
+      await atomicWrite(abs, prependEntry(content, entry));
       return {
         content: [{ type: "text", text: `Appended worklog entry for [${project}] on ${date}` }],
       };
