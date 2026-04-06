@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { zipSync } from 'fflate'
 import type { ViewId, MemoryDirectory, ProjectEntry } from '../../types/memory'
 
 interface Props {
@@ -27,6 +28,22 @@ const NAV: { id: ViewId; label: string; icon: string }[] = [
   { id: 'activity',   label: 'Activity',   icon: '⟳' },
   { id: 'search',     label: 'Search',     icon: '⊹' },
 ]
+
+function exportZip(directory: MemoryDirectory) {
+  const encoder = new TextEncoder()
+  const entries: Record<string, Uint8Array> = {}
+  for (const [path, file] of directory.files) {
+    entries[path] = encoder.encode(file.content)
+  }
+  const zipped = zipSync(entries)
+  const blob = new Blob([zipped.buffer as ArrayBuffer], { type: 'application/zip' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'memory-snapshot.zip'
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstrap, projects = [], onSwitchProject, onBrowseProjects, refreshInterval = 4000, onShowGuide }: Props) {
   const [bootstrapping, setBootstrapping] = useState(false)
@@ -275,10 +292,10 @@ export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstr
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
             <span>{directory.files.size} files loaded</span>
-            {onShowGuide && (
+            <div style={{ display: 'flex', gap: 4 }}>
               <button
-                onClick={onShowGuide}
-                title="Show session start guide"
+                onClick={() => exportZip(directory)}
+                title="Export memory snapshot as zip"
                 style={{
                   background: 'none',
                   border: '1px solid var(--border)',
@@ -295,9 +312,32 @@ export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstr
                   flexShrink: 0,
                 }}
               >
-                ?
+                ↓
               </button>
-            )}
+              {onShowGuide && (
+                <button
+                  onClick={onShowGuide}
+                  title="Show session start guide"
+                  style={{
+                    background: 'none',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-muted)',
+                    fontSize: 10,
+                    width: 18,
+                    height: 18,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    padding: 0,
+                    flexShrink: 0,
+                  }}
+                >
+                  ?
+                </button>
+              )}
+            </div>
           </div>
           <div style={{ color: 'var(--text-muted)', opacity: 0.6 }}>
             {refreshInterval === 0
