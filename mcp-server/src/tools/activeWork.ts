@@ -49,13 +49,13 @@ export function registerActiveWorkTools(server: McpServer, memoryDir: string): v
     "update_active_work",
     "Upsert an agent block in active-work.md. Creates the block if agent_id is not found; replaces it if found.",
     {
-      agent_id: z.string().describe("Unique agent identifier, e.g. 'Claude' or 'agent-1'"),
-      project: z.string().describe("Project name written inside brackets, e.g. 'neurostack'"),
-      task: z.string().describe("Short task description"),
+      agent_id: z.string().min(1).describe("Unique agent identifier, e.g. 'Claude' or 'agent-1'"),
+      project: z.string().min(1).describe("Project name written inside brackets, e.g. 'neurostack'"),
+      task: z.string().min(1).describe("Short task description"),
       status: z.enum(["working", "blocked", "done"]).describe("Current status"),
       doing: z.string().optional().describe("What the agent is doing right now"),
       files_touched: z.string().optional().describe("Comma-separated list of files being modified"),
-      started: z.string().optional().describe("ISO date (YYYY-MM-DD) when work started — defaults to today"),
+      started: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) when work started — defaults to today"),
     },
     async ({ agent_id, project, task, status, doing, files_touched, started }) => {
       const abs = resolveSafe(memoryDir, ACTIVE_WORK_FILE);
@@ -93,7 +93,15 @@ export function registerActiveWorkTools(server: McpServer, memoryDir: string): v
     },
     async ({ agent_id }) => {
       const abs = resolveSafe(memoryDir, ACTIVE_WORK_FILE);
-      const content = await readFile(abs);
+      let content: string;
+      try {
+        content = await readFile(abs);
+      } catch {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `active-work.md not found — nothing to remove` }],
+        };
+      }
 
       const { intro, blocks } = splitBlocks(content);
       const filtered = blocks.filter(b => !matchesAgent(b, agent_id));

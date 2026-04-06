@@ -11,8 +11,8 @@ export function registerWorklogTools(server: McpServer, memoryDir: string): void
     "append_worklog",
     "Append a worklog entry to worklog.md. Format: ## YYYY-MM-DD [project] / - summary.",
     {
-      project: z.string().describe("Project name (written inside brackets in the header)"),
-      summary: z.string().describe("One-line summary of the session"),
+      project: z.string().min(1).describe("Project name (written inside brackets in the header)"),
+      summary: z.string().min(1).describe("One-line summary of the session"),
       files_touched: z.string().optional().describe("Comma-separated list of files modified"),
     },
     async ({ project, summary, files_touched }) => {

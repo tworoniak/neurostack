@@ -18,13 +18,26 @@ export function registerFileTools(server: McpServer, memoryDir: string): void {
   server.tool(
     "read_file",
     "Read a memory file verbatim. `path` is relative to the memory directory.",
-    { path: z.string().describe("Relative path to the .md file") },
+    { path: z.string().min(1).describe("Relative path to the .md file") },
     async ({ path: rel }) => {
-      const abs = resolveSafe(memoryDir, rel);
-      const content = await readFile(abs);
-      return {
-        content: [{ type: "text", text: content }],
-      };
+      let abs: string;
+      try {
+        abs = resolveSafe(memoryDir, rel);
+      } catch (err) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: (err as Error).message }],
+        };
+      }
+      try {
+        const content = await readFile(abs);
+        return { content: [{ type: "text", text: content }] };
+      } catch {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `File not found: ${rel}` }],
+        };
+      }
     }
   );
 
@@ -32,15 +45,21 @@ export function registerFileTools(server: McpServer, memoryDir: string): void {
     "write_file",
     "Full-replace write to a memory file. Creates the file if it does not exist. `path` is relative to the memory directory.",
     {
-      path: z.string().describe("Relative path to the .md file"),
+      path: z.string().min(1).describe("Relative path to the .md file"),
       content: z.string().describe("Full file content to write"),
     },
     async ({ path: rel, content }) => {
-      const abs = resolveSafe(memoryDir, rel);
+      let abs: string;
+      try {
+        abs = resolveSafe(memoryDir, rel);
+      } catch (err) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: (err as Error).message }],
+        };
+      }
       await atomicWrite(abs, content);
-      return {
-        content: [{ type: "text", text: `Written: ${rel}` }],
-      };
+      return { content: [{ type: "text", text: `Written: ${rel}` }] };
     }
   );
 }
