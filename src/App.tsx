@@ -82,6 +82,16 @@ export default function App() {
   const [editorJumpPath, setEditorJumpPath] = useState<string | undefined>()
   // Session guide: show once per browser session after directory connects
   const [showSessionGuide, setShowSessionGuide] = useState(false)
+  // Refresh interval — persisted in localStorage, default 4s
+  const [refreshInterval, setRefreshInterval] = useState<number>(() => {
+    const stored = localStorage.getItem('neurostack_refresh_interval')
+    return stored !== null ? parseInt(stored, 10) : 4000
+  })
+
+  const handleIntervalChange = (ms: number) => {
+    localStorage.setItem('neurostack_refresh_interval', String(ms))
+    setRefreshInterval(ms)
+  }
 
   const { directory, error, loading, restoring, changedPaths, newFiles, activityLog, projects, openDirectory, writeFile, refreshAll, refreshFile, deleteFile, renameFile, clearNewFile, bootstrapDirectory, openProjectBrowser, switchProject } = useMemoryFS()
 
@@ -112,7 +122,7 @@ export default function App() {
   }, [directory, refreshing, handleRefresh])
 
   // Auto-refresh on interval when directory is open
-  useFileWatcher(directory, handleRefresh, 4000)
+  useFileWatcher(directory, handleRefresh, refreshInterval)
 
   const handleSelectFileFromSearch = (path: string) => {
     setEditorJumpPath(path)
@@ -140,6 +150,8 @@ export default function App() {
         projects={projects}
         onSwitchProject={switchProject}
         onBrowseProjects={openProjectBrowser}
+        refreshInterval={refreshInterval}
+        onShowGuide={() => setShowSessionGuide(true)}
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -152,6 +164,8 @@ export default function App() {
               onRefresh={handleRefresh}
               lastRefreshed={lastRefreshed}
               refreshing={refreshing}
+              refreshInterval={refreshInterval}
+              onIntervalChange={handleIntervalChange}
             />
 
             {showSessionGuide && (

@@ -10,6 +10,8 @@ interface Props {
   projects?: ProjectEntry[]
   onSwitchProject?: (entry: ProjectEntry) => void
   onBrowseProjects?: () => void
+  refreshInterval?: number
+  onShowGuide?: () => void
 }
 
 const NAV: { id: ViewId; label: string; icon: string }[] = [
@@ -26,7 +28,7 @@ const NAV: { id: ViewId; label: string; icon: string }[] = [
   { id: 'search',     label: 'Search',     icon: '⊹' },
 ]
 
-export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstrap, projects = [], onSwitchProject, onBrowseProjects }: Props) {
+export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstrap, projects = [], onSwitchProject, onBrowseProjects, refreshInterval = 4000, onShowGuide }: Props) {
   const [bootstrapping, setBootstrapping] = useState(false)
   const [projectName, setProjectName] = useState('')
 
@@ -271,8 +273,37 @@ export function Sidebar({ activeView, onViewChange, directory, onOpen, onBootstr
           fontSize: 10,
           letterSpacing: '0.05em',
         }}>
-          <div style={{ marginBottom: 2 }}>{directory.files.size} files loaded</div>
-          <div style={{ color: 'var(--text-muted)', opacity: 0.6 }}>watching · 4s interval</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+            <span>{directory.files.size} files loaded</span>
+            {onShowGuide && (
+              <button
+                onClick={onShowGuide}
+                title="Show session start guide"
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-muted)',
+                  fontSize: 10,
+                  width: 18,
+                  height: 18,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  flexShrink: 0,
+                }}
+              >
+                ?
+              </button>
+            )}
+          </div>
+          <div style={{ color: 'var(--text-muted)', opacity: 0.6 }}>
+            {refreshInterval === 0
+              ? 'manual refresh'
+              : `watching · ${refreshInterval < 1000 ? refreshInterval + 'ms' : refreshInterval / 1000 + 's'} interval`}
+          </div>
         </div>
       )}
     </aside>
