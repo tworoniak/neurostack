@@ -11,9 +11,9 @@ export function registerDecisionTools(server: McpServer, memoryDir: string): voi
     "add_decision",
     "Append a decision entry to decisions.md. Format: ## YYYY-MM-DD - Title / body.",
     {
-      title: z.string().describe("Decision title"),
-      body: z.string().describe("Decision body — rationale, context, trade-offs, consequences"),
-      date: z.string().optional().describe("ISO date (YYYY-MM-DD) — defaults to today"),
+      title: z.string().min(1).describe("Decision title"),
+      body: z.string().min(1).describe("Decision body — rationale, context, trade-offs, consequences"),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("ISO date (YYYY-MM-DD) — defaults to today"),
     },
     async ({ title, body, date }) => {
       const abs = resolveSafe(memoryDir, "decisions.md");

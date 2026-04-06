@@ -11,10 +11,10 @@ export function registerGotchaTools(server: McpServer, memoryDir: string): void 
     "add_gotcha",
     "Append a gotcha entry to gotchas.md.",
     {
-      title: z.string().describe("Short title describing the gotcha"),
-      affects: z.string().describe("Component or area affected (e.g. 'FileEditor', 'useMemoryFS')"),
-      symptom: z.string().describe("What you observe when the bug is present"),
-      fix: z.string().describe("How to fix or work around the gotcha"),
+      title: z.string().min(1).describe("Short title describing the gotcha"),
+      affects: z.string().min(1).describe("Component or area affected (e.g. 'FileEditor', 'useMemoryFS')"),
+      symptom: z.string().min(1).describe("What you observe when the bug is present"),
+      fix: z.string().min(1).describe("How to fix or work around the gotcha"),
     },
     async ({ title, affects, symptom, fix }) => {
       const abs = resolveSafe(memoryDir, "gotchas.md");

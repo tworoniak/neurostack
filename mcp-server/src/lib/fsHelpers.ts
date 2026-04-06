@@ -9,6 +9,7 @@ export function resolveSafe(base: string, rel: string): string {
   const resolved = path.resolve(base, rel);
   const normalBase = path.resolve(base);
   if (!resolved.startsWith(normalBase + path.sep) && resolved !== normalBase) {
+    console.error(`[neurostack-mcp] Path traversal rejected: "${rel}" escapes memory directory`);
     throw new Error(`Path traversal rejected: "${rel}" escapes memory directory`);
   }
   return resolved;

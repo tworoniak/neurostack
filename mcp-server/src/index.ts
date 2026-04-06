@@ -7,6 +7,7 @@ import { registerWorklogTools } from "./tools/worklog.js";
 import { registerActiveWorkTools } from "./tools/activeWork.js";
 import { registerGotchaTools } from "./tools/gotchas.js";
 import { registerDecisionTools } from "./tools/decisions.js";
+import { registerSearchTools } from "./tools/search.js";
 
 const memoryDirArg = process.argv[2];
 
@@ -32,6 +33,7 @@ registerWorklogTools(server, memoryDir);
 registerActiveWorkTools(server, memoryDir);
 registerGotchaTools(server, memoryDir);
 registerDecisionTools(server, memoryDir);
+registerSearchTools(server, memoryDir);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
